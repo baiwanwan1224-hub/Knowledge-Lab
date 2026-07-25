@@ -9,6 +9,16 @@ from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+# Load .env file if present (for zero-config startup)
+ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+if os.path.exists(ENV_FILE):
+    with open(ENV_FILE, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k, v = line.split('=', 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
 # === CONFIG (all from env vars) ===
 DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
 if not DEEPSEEK_API_KEY:

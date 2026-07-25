@@ -51,37 +51,45 @@
 
 ## Quick Start · 快速开始
 
-### 1. Install · 安装依赖
+**Zero dependencies beyond Python. No Docker, no PostgreSQL, no n8n required.**
+
+### Windows
 
 ```bash
+# Double-click or run:
+start.bat
+```
+
+### Mac / Linux
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+### What it does
+
+1. First run: asks for your DeepSeek API Key → saved to `.env`
+2. Installs Python packages (`pip install -r requirements.txt`)
+3. Creates vault directories + copies templates
+4. Starts server at `http://localhost:5050` + opens browser
+
+### Manual start
+
+```bash
+echo "DEEPSEEK_API_KEY=sk-your-key" > .env
+echo "VAULT_PATH=./vault" >> .env
 pip install -r requirements.txt
-```
-
-### 2. Configure · 配置环境变量
-
-```bash
-export DEEPSEEK_API_KEY="sk-your-key"
-export PG_HOST="localhost"
-export PG_PORT="5432"
-export PG_DATABASE="n8n_scraper"
-export PG_USER="n8n"
-export PG_PASSWORD="your-password"
-export VAULT_PATH="/path/to/ObsidianVault/AI-PM-学习"
-```
-
-### 3. Init DB · 初始化数据库 (optional · 可选)
-
-```bash
-psql -h $PG_HOST -U $PG_USER -d $PG_DATABASE -f sql/schema.sql
-```
-
-### 4. Start · 启动
-
-```bash
 python server/quiz_server.py --port 5050
 ```
 
-Open `http://localhost:5050` in browser · 浏览器打开
+### Optional: PostgreSQL
+
+By default, data is stored as JSON files. If you want PostgreSQL:
+```bash
+export PG_HOST=localhost PG_PORT=5432 PG_DATABASE=n8n_scraper PG_USER=n8n PG_PASSWORD=your-pw
+psql -h $PG_HOST -U $PG_USER -d $PG_DATABASE -f sql/schema.sql
+```
 
 ## Features · 功能
 
