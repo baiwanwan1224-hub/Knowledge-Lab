@@ -137,7 +137,7 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 
 **Commercial Use · 商用许可**: A separate commercial license is required for any commercial use (internal business deployment, SaaS, embedding in commercial products).
 
-Contact · 联系: baiwanwan@reforox.com
+Contact · 联系: baiwanwan1224@gmail.com
 
 ---
 
