@@ -47,6 +47,12 @@ VAULT_BASE = os.environ.get('VAULT_PATH', os.path.join(os.path.dirname(SCRIPTS_D
 NOTES_DIR = os.path.join(VAULT_BASE, '00_学习笔记')
 WRONG_DIR = os.path.join(VAULT_BASE, '01_错题本')
 STANDARDS_DIR = os.path.join(VAULT_BASE, '06_产品层')
+IMPORTS_LOG = os.path.join(VAULT_BASE, '03_测验报告', '_imports.jsonl')
+
+def log_import(import_type, source, title, topics, note_file):
+    os.makedirs(os.path.dirname(IMPORTS_LOG), exist_ok=True)
+    with open(IMPORTS_LOG, 'a', encoding='utf-8') as f:
+        f.write(json.dumps({'timestamp': datetime.now().isoformat(), 'type': import_type, 'source': source, 'title': title, 'topics': topics, 'file': note_file}, ensure_ascii=False) + '\n')
 
 # === DATABASE ===
 def get_db():
@@ -161,6 +167,7 @@ class QuizHandler(BaseHTTPRequestHandler):
         elif path == '/notes': self._handle_notes()
         elif path == '/note': self._handle_note(parsed)
         elif path == '/notes/drafts': self._handle_drafts()
+        elif path == '/notes/imports': self._handle_imports()
         elif path == '/competency': self._handle_competency()
         elif path == '/history': self._handle_history()
         elif path == '/wrong-answers': self._handle_wrong_answers()
@@ -325,6 +332,15 @@ class QuizHandler(BaseHTTPRequestHandler):
             self._send_json({'error': str(e)}, 500)
 
     # -- Drafts --
+    def _handle_imports(self):
+        imports = []
+        if os.path.exists(IMPORTS_LOG):
+            with open(IMPORTS_LOG, 'r', encoding='utf-8') as f:
+                for line in f:
+                    try: imports.append(json.loads(line.strip()))
+                    except: pass
+        self._send_json({'imports': list(reversed(imports))[-50:], 'total': len(imports)})
+
     def _handle_drafts(self):
         drafts = []
         try:
@@ -455,6 +471,7 @@ quality_score: unverified
 """
         filename = f'{date_str}_{safe_title}_URL.md'; filepath = os.path.join(NOTES_DIR, filename)
         with open(filepath, 'w', encoding='utf-8') as f: f.write(note)
+        log_import('URL', url, data.get('title', ''), topics, filename)
         self._send_json({'status': 'success', 'title': data.get('title', ''), 'topics': topics, 'file': filename, 'summary': data.get('summary', '')})
 
     # -- File upload --
@@ -465,7 +482,7 @@ quality_score: unverified
         if not boundary: self._send_json({'error': 'No boundary found'}, 400); return
         body = raw_body; boundary_bytes = boundary.encode('utf-8')
         parts = body.split(b'--' + boundary_bytes)
-        file_content = None; filename = None
+        files = []
         for part in parts:
             if b'Content-Disposition' not in part: continue
             header_end = part.find(b'\r\n\r\n')
@@ -475,63 +492,75 @@ quality_score: unverified
             if data.endswith(b'\r\n'): data = data[:-2]
             if data.endswith(b'--'): data = data[:-2]
             if 'name="file"' in headers_raw:
-                file_content = data
                 fn_match = re.search(r'filename="([^"]+)"', headers_raw)
-                if fn_match: filename = fn_match.group(1)
-        if not file_content or not filename:
+                if fn_match: files.append({'filename': fn_match.group(1), 'content': data})
+        if not files:
             self._send_json({'error': '未找到文件'}, 400); return
-        ext = os.path.splitext(filename)[1].lower(); text = ''; source_type = '本地文件'
-        if ext == '.pdf':
-            try:
-                from PyPDF2 import PdfReader; import io
-                reader = PdfReader(io.BytesIO(file_content))
-                text = '\n'.join(page.extract_text() or '' for page in reader.pages)
-                source_type = 'PDF导入'
-            except ImportError:
-                self._send_json({'error': 'PDF需要PyPDF2: pip install PyPDF2'}, 500); return
-            except Exception as e:
-                self._send_json({'error': f'PDF解析失败: {str(e)[:100]}'}, 500); return
-        elif ext in ['.md', '.txt', '.markdown']:
-            text = file_content.decode('utf-8', errors='replace')
-            source_type = 'MD导入' if ext == '.md' else 'TXT导入'
-        else:
-            self._send_json({'error': f'不支持: {ext}。支持 .md/.txt/.pdf'}, 400); return
-        if len(text.strip()) < 50:
-            self._send_json({'error': '文件内容太少'}, 400); return
-        existing_topics = set()
-        for fname in os.listdir(NOTES_DIR):
-            if fname.endswith('.md') and not fname.startswith('模板'):
+
+        results = []; topics_cache = None
+        for fobj in files:
+            filename = fobj['filename']; file_content = fobj['content']
+            ext = os.path.splitext(filename)[1].lower(); text = ''; source_type = '本地文件'
+            if ext == '.pdf':
                 try:
-                    with open(os.path.join(NOTES_DIR, fname), 'r', encoding='utf-8') as fh:
-                        for line in fh:
-                            if line.startswith('topic:') or line.startswith('topics:'):
-                                for t in line.split(':', 1)[1].strip().strip('"[]').split(','):
-                                    if t.strip(): existing_topics.add(t.strip())
-                                break
-                except: pass
-        prompt = f"""你是知识管理助手。请阅读以下文件内容，整理为一篇学习笔记。
+                    from PyPDF2 import PdfReader; import io
+                    reader = PdfReader(io.BytesIO(file_content))
+                    text = '\n'.join(page.extract_text() or '' for page in reader.pages)
+                    source_type = 'PDF导入'
+                except ImportError:
+                    results.append({'file': filename, 'error': 'PDF需要PyPDF2'})
+                    continue
+                except Exception as e:
+                    results.append({'file': filename, 'error': f'PDF解析失败: {str(e)[:80]}'})
+                    continue
+            elif ext in ['.md', '.txt', '.markdown']:
+                text = file_content.decode('utf-8', errors='replace')
+                source_type = 'MD导入' if ext == '.md' else 'TXT导入'
+            else:
+                results.append({'file': filename, 'error': f'不支持: {ext}'})
+                continue
+            if len(text.strip()) < 50:
+                results.append({'file': filename, 'error': '内容太少'})
+                continue
+            # Cache existing topics (only fetch once)
+            if topics_cache is None:
+                topics_cache = set()
+                for fname in os.listdir(NOTES_DIR):
+                    if fname.endswith('.md') and not fname.startswith('模板'):
+                        try:
+                            with open(os.path.join(NOTES_DIR, fname), 'r', encoding='utf-8') as fh:
+                                for line in fh:
+                                    if line.startswith('topic:') or line.startswith('topics:'):
+                                        for t in line.split(':', 1)[1].strip().strip('"[]').split(','):
+                                            if t.strip(): topics_cache.add(t.strip())
+                                        break
+                        except: pass
+            prompt = f"""你是知识管理助手。请阅读以下文件内容，整理为一篇学习笔记。
 
 ## 内容
 {text[:6000]}
 
 ## 现有主题
-{', '.join(sorted(existing_topics)) if existing_topics else 'AI技术理解, 产品设计能力, 商业化思维, 工程协作能力, 评测体系搭建, 数据驱动决策'}
+{', '.join(sorted(topics_cache)) if topics_cache else 'AI技术理解, 产品设计能力, 商业化思维, 工程协作能力, 评测体系搭建, 数据驱动决策'}
 
 输出格式（严格JSON）：{{"title":"标题","topics":["分类1"],"content":"笔记...","summary":"摘要"}}"""
-        try:
-            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
-                json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
-            if resp.status_code != 200: self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return
-            content = resp.json()['choices'][0]['message']['content'].strip()
-            if content.startswith('```'): content = content.split('\n', 1)[1]
-            if content.endswith('```'): content = content[:-3]
-            data = json.loads(content)
-        except Exception as e:
-            self._send_json({'error': f'LLM处理失败: {str(e)[:100]}'}, 500); return
-        date_str = datetime.now().strftime('%Y%m%d')
-        safe_title = data.get('title', filename)[:40].replace('/', '-').replace(':', '-')
-        topics = data.get('topics', ['AI产品经理'])
-        note = f"""---
+            try:
+                resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
+                    json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
+                if resp.status_code != 200:
+                    results.append({'file': filename, 'error': f'LLM API error: {resp.status_code}'})
+                    continue
+                content = resp.json()['choices'][0]['message']['content'].strip()
+                if content.startswith('```'): content = content.split('\n', 1)[1]
+                if content.endswith('```'): content = content[:-3]
+                data = json.loads(content)
+            except Exception as e:
+                results.append({'file': filename, 'error': f'LLM: {str(e)[:80]}'})
+                continue
+            date_str = datetime.now().strftime('%Y%m%d')
+            safe_title = data.get('title', filename)[:40].replace('/', '-').replace(':', '-')
+            topics = data.get('topics', ['AI产品经理'])
+            note = f"""---
 type: study-note
 source: {source_type}
 source_url: (本地文件: {filename})
@@ -552,9 +581,13 @@ quality_score: unverified
 
 {data.get('content', text[:3000])}
 """
-        note_filename = f'{date_str}_{safe_title}_本地.md'; filepath = os.path.join(NOTES_DIR, note_filename)
-        with open(filepath, 'w', encoding='utf-8') as f: f.write(note)
-        self._send_json({'status': 'success', 'title': data.get('title', ''), 'topics': topics, 'file': note_filename, 'format': ext, 'source': f'本地文件: {filename}'})
+            note_filename = f'{date_str}_{safe_title}_本地.md'; filepath = os.path.join(NOTES_DIR, note_filename)
+            with open(filepath, 'w', encoding='utf-8') as f: f.write(note)
+            log_import('本地文件', f'文件: {filename}', data.get('title', ''), topics, note_filename)
+            results.append({'file': filename, 'status': 'success', 'title': data.get('title', ''), 'topics': topics, 'note_file': note_filename})
+
+        success_count = sum(1 for r in results if r.get('status') == 'success')
+        self._send_json({'status': 'success' if success_count > 0 else 'error', 'total': len(files), 'success': success_count, 'failed': len(files) - success_count, 'results': results})
 
     # -- Whisper transcribe --
     def _handle_transcribe(self, body):
@@ -642,6 +675,7 @@ quality_score: whisper_auto
 """
             note_filename = f'{date_str}_{safe_title}_Whisper.md'; filepath = os.path.join(NOTES_DIR, note_filename)
             with open(filepath, 'w', encoding='utf-8') as f: f.write(note)
+            log_import('Whisper转录', f'视频: {title}', data.get('title', title), topics, note_filename)
             self._send_json({'status': 'success', 'title': data.get('title', title), 'topics': topics, 'file': note_filename, 'transcript_length': len(transcript), 'source': f'Whisper转录: {title}'})
         except Exception as e:
             self._send_json({'error': f'转录失败：{str(e)[:200]}'}, 500)

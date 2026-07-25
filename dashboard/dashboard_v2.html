@@ -274,7 +274,7 @@ tr:hover{background:var(--bg)}
     <div class="import-row">
       <input type="url" id="importUrl" placeholder="粘贴文章链接，自动转为学习笔记...">
       <button class="btn btn-primary" onclick="importURL()" id="importBtn">🔗 导入链接</button>
-      <input type="file" id="importFile" accept=".md,.txt,.pdf" style="position:absolute;opacity:0;width:0;height:0;overflow:hidden" onchange="importFile()">
+      <input type="file" id="importFile" accept=".md,.txt,.pdf" multiple style="position:absolute;opacity:0;width:0;height:0;overflow:hidden" onchange="importFile()">
       <label for="importFile" class="btn btn-outline btn-sm" style="cursor:pointer" title="支持 .md / .txt / .pdf">📁 本地文件</label>
     </div>
     <div class="url-import-result" id="importResult"></div>
@@ -295,6 +295,12 @@ tr:hover{background:var(--bg)}
     </select>
   </div>
   <div class="note-grid" id="noteGrid"><div class="loading"><div class="spinner"></div></div></div>
+
+  <!-- Import History -->
+  <details style="margin-top:20px" id="importHistory">
+    <summary style="cursor:pointer;font-size:13px;color:var(--text-muted);padding:8px 0">📋 导入记录 <span id="importCount" style="font-size:11px;color:var(--text-dim)"></span></summary>
+    <div id="importHistoryList" style="margin-top:8px;font-size:12px;color:var(--text-muted)">Loading...</div>
+  </details>
 </div>
 
 <!-- MODAL: Note Detail -->
@@ -398,8 +404,28 @@ const DIM_COLORS = {
 async function init() {
   await checkHealth();
   await loadNotes();
+  await loadDailyReviewBadge();
   loadTopicsDropdown();
   if (document.getElementById('page-dashboard').classList.contains('active')) { loadDashboard(); loadCompetency(); }
+}
+
+async function loadDailyReviewBadge() {
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const lastSeen = localStorage.getItem('wrongBadgeSeen') || '';
+    if (lastSeen === today) { document.getElementById('wrongBadge').style.display = 'none'; return; }
+    const data = await fetch(API + '/wrong-answers').then(r => r.json());
+    const due = data.obsidian_cards_due_today || 0;
+    const badge = document.getElementById('wrongBadge');
+    if (due > 0) { badge.textContent = due; badge.style.display = ''; }
+    else badge.style.display = 'none';
+  } catch(e) {}
+}
+
+function dismissWrongBadge() {
+  const today = new Date().toISOString().slice(0,10);
+  localStorage.setItem('wrongBadgeSeen', today);
+  document.getElementById('wrongBadge').style.display = 'none';
 }
 
 function checkHealth() {
@@ -430,8 +456,8 @@ function switchPage(name) {
   document.querySelector(`[data-page="${name}"]`).classList.add('active');
 
   if (name === 'dashboard') { loadDashboard(); loadCompetency(); }
-  else if (name === 'knowledge') renderNotes();
-  else if (name === 'wrong') loadWrongAnswers();
+  else if (name === 'knowledge') { renderNotes(); loadImportHistory(); }
+  else if (name === 'wrong') { loadWrongAnswers(); dismissWrongBadge(); }
   else if (name === 'history') loadHistory();
   else if (name === 'quiz') loadTopicsDropdown();
 }
@@ -777,43 +803,53 @@ async function importURL() {
   }
 }
 
+async function loadImportHistory() {
+  try {
+    const data = await fetch(API + '/notes/imports').then(r => r.json());
+    const imports = data.imports || [];
+    document.getElementById('importCount').textContent = `(${imports.length} 条)`;
+    if (!imports.length) {
+      document.getElementById('importHistoryList').innerHTML = '暂无导入记录';
+      return;
+    }
+    document.getElementById('importHistoryList').innerHTML = imports.slice(0, 30).map(imp => `
+      <div style="padding:4px 0;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;gap:12px">
+        <span><span class="tag tag-${imp.type==='URL'?'primary':imp.type==='Whisper转录'?'accent':'green'}" style="font-size:8px">${imp.type||'导入'}</span> ${imp.title||'无标题'}</span>
+        <span style="white-space:nowrap;font-size:10px">${(imp.timestamp||'').slice(0,16)}</span>
+      </div>`).join('');
+  } catch(e) {}
+}
+
 async function importFile() {
   const fileInput = document.getElementById('importFile');
-  const file = fileInput.files[0];
-  if (!file) return;
+  const files = fileInput.files;
+  if (!files.length) return;
 
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (!['md', 'txt', 'pdf'].includes(ext)) {
-    showToast('不支持的文件格式：.' + ext + '。支持 .md / .txt / .pdf', 'error');
-    fileInput.value = '';
-    return;
-  }
-
-  showToast('上传并处理文件...', 'info');
   const importBtn = document.getElementById('importBtn');
   importBtn.disabled = true;
-  importBtn.textContent = '处理中...';
+  importBtn.textContent = files.length > 1 ? `处理 ${files.length} 个文件...` : '处理中...';
+  let successCount = 0; let failCount = 0;
 
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const resp = await fetch(API + '/notes/upload', { method: 'POST', body: formData });
-    const data = await resp.json();
-
-    if (data.error) {
-      showToast('导入失败：' + data.error, 'error');
-    } else {
-      showToast(`✅ 「${data.title}」导入成功！(${data.format}) · 状态：待确认`, 'success');
-      fileInput.value = '';
-      await loadNotes();
-      renderNotes();
+  for (const file of files) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['md', 'txt', 'pdf'].includes(ext)) {
+      showToast(`跳过 ${file.name}：不支持 .${ext}`, 'error');
+      failCount++; continue;
     }
-  } catch(e) {
-    showToast('上传失败：' + e.message, 'error');
-  } finally {
-    importBtn.disabled = false;
-    importBtn.textContent = '🔗 导入链接';
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const resp = await fetch(API + '/notes/upload', { method: 'POST', body: formData });
+      const data = await resp.json();
+      if (data.error) { showToast(`${file.name} 失败：${data.error}`, 'error'); failCount++; }
+      else { successCount++; }
+    } catch(e) { showToast(`${file.name} 失败：${e.message}`, 'error'); failCount++; }
   }
+  fileInput.value = '';
+  importBtn.disabled = false;
+  importBtn.textContent = '🔗 导入链接';
+  showToast(`导入完成：成功 ${successCount}，失败 ${failCount}`, successCount > 0 ? 'success' : 'error');
+  await loadNotes(); renderNotes(); loadImportHistory();
 }
 
 async function openNote(path) {
@@ -1005,7 +1041,15 @@ function renderQuizResult(result) {
       <p style="font-size:15px;color:var(--text-muted)"><strong>你的答案：</strong>${(r.user_answer||'').slice(0,200)}</p>
       <div style="font-size:16px;line-height:1.7;margin-top:8px">${r.feedback||''}</div>
       ${(r.weakness_tags||[]).length ? `<div class="tags-row mt-8">${r.weakness_tags.map(t => `<span class="tag tag-red">${t}</span>`).join('')}</div>` : ''}
+      ${r.source_citation && r.source_citation !== '无相关原文' ? `<div class="mt-8" style="padding:10px;background:#F0F7FF;border-radius:2px;border-left:3px solid var(--primary)"><span style="font-size:12px;color:var(--primary);font-weight:500">📖 原文依据</span><div style="font-size:13px;line-height:1.7;margin-top:4px;color:var(--text)">${r.source_citation}</div></div>` : ''}
       ${r.suggested_review ? `<p class="text-muted mt-8">📖 ${r.suggested_review}</p>` : ''}
+      <div class="mt-8" style="padding:8px;background:var(--bg);border-radius:2px">
+        <span style="font-size:11px;color:var(--text-dim)">🧠 这道题我是：</span>
+        <button class="btn btn-sm btn-outline metacog-btn" onclick="event.stopPropagation();saveMetacog('${quizData.session_uuid}',${i},'reasoned_wrong',this)" style="font-size:10px;margin:2px">推理错了</button>
+        <button class="btn btn-sm btn-outline metacog-btn" onclick="event.stopPropagation();saveMetacog('${quizData.session_uuid}',${i},'guessed',this)" style="font-size:10px;margin:2px">蒙的</button>
+        <button class="btn btn-sm btn-outline metacog-btn" onclick="event.stopPropagation();saveMetacog('${quizData.session_uuid}',${i},'hesitated',this)" style="font-size:10px;margin:2px">两个选项犹豫</button>
+        <button class="btn btn-sm btn-outline metacog-btn" onclick="event.stopPropagation();saveMetacog('${quizData.session_uuid}',${i},'slip',this)" style="font-size:10px;margin:2px">手滑选错</button>
+      </div>
       ${relatedNotes.length ? `<div class="mt-8" style="padding:10px;background:var(--bg);border-radius:2px">
         <span style="font-size:13px;color:var(--text-muted)">📚 相关文章：</span>
         ${relatedNotes.map(rn => { const note = rn.note || rn; const snippets = rn.snippets || [];
@@ -1383,6 +1427,20 @@ async function transcribeVideo(url) {
     resultDiv.innerHTML = `❌ 转录失败：${e.message}`;
     showToast('转录失败', 'error');
   }
+}
+
+// ===== METACOGNITION =====
+async function saveMetacog(sessionUuid, qIndex, metaTag, btn) {
+  try {
+    await fetch(API + '/quiz/metacog', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({session_uuid: sessionUuid, question_index: qIndex, meta_tag: metaTag})
+    });
+    // Highlight selected button
+    const allBtns = btn.parentElement.querySelectorAll('.metacog-btn');
+    allBtns.forEach(b => { b.style.background = ''; b.style.color = ''; });
+    btn.style.background = 'var(--primary)'; btn.style.color = '#fff';
+  } catch(e) { console.error('metacog save failed', e); }
 }
 
 // ===== DELETE NOTE =====
