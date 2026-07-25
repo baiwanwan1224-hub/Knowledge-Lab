@@ -1,0 +1,6 @@
+requests>=2.28
+psycopg2-binary>=2.9
+youtube-transcript-api>=1.0
+faster-whisper>=1.0
+yt-dlp>=2024.1
+PyPDF2>=3.0

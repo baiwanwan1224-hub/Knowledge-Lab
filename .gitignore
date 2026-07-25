@@ -1,0 +1,33 @@
+# Secrets
+.env
+*.key
+*secret*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+
+# Obsidian
+.obsidian/
+**/.trash/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime
+/tmp/
+*.log
+
+# User data (don't commit personal notes)
+vault/00_学习笔记/*.md
+vault/01_错题本/*.md
+vault/03_测验报告/*.md
+!vault/00_学习笔记/模板_*.md
+!vault/01_错题本/模板_*.md
