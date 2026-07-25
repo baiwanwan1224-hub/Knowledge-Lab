@@ -6,9 +6,9 @@ Usage: python quiz_grader.py --input-file /tmp/session.json
 import sys, os, json, argparse, requests
 from datetime import datetime, timedelta
 
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
-DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
-DEEPSEEK_MODEL = 'deepseek-v4-pro'
+LLM_API_KEY = os.environ.get('LLM_API_KEY', os.environ.get('LLM_API_KEY', ''))
+LLM_API_URL = os.environ.get('LLM_API_URL', 'https://api.deepseek.com/v1/chat/completions')
+LLM_MODEL = os.environ.get('LLM_MODEL', 'deepseek-v4-pro')
 VAULT_PATH = os.environ.get('VAULT_PATH', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'vault'))
 WRONG_ANSWER_DIR = os.path.join(VAULT_PATH, '01_错题本')
 
@@ -30,7 +30,7 @@ def grade_answer(question, user_answer):
 - 质量阈值：单题得分<60%标准分→标记为错题
 - 输出格式（严格JSON）：{{"score":3.5,"max_score":5.0,"is_correct":false,"feedback":"反馈...","strengths":[],"gaps":[],"weakness_tags":[],"misunderstanding":"","suggested_review":"","confidence":0.85}}
 - weakness_tags可选：概念理解不清、缺少具体案例、框架不完整、分析深度不足、表述不够精准、完全错误"""
-    resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
+    resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
         json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '严格但公平的评分专家。严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 1500}, timeout=60)
     if resp.status_code != 200: return {'error': f'API error {resp.status_code}'}
     content = resp.json()['choices'][0]['message']['content'].strip()

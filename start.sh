@@ -20,7 +20,7 @@ if [ ! -f .env ]; then
     echo "[SETUP] First run — configuring..."
     echo ""
     read -p "Enter your DeepSeek API Key: " API_KEY
-    echo "DEEPSEEK_API_KEY=$API_KEY" > .env
+    echo "LLM_API_KEY=$API_KEY" > .env
     echo "VAULT_PATH=./vault" >> .env
     echo ""
     echo "[OK] Configuration saved to .env"

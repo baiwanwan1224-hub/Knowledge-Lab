@@ -24,7 +24,8 @@ if not exist .env (
     echo [SETUP] First run — configuring...
     echo.
     set /p API_KEY="Enter your DeepSeek API Key: "
-    echo DEEPSEEK_API_KEY=!API_KEY!> .env
+    echo LLM_API_KEY=!API_KEY!> .env
+echo LLM_PROVIDER=deepseek>> .env
     echo VAULT_PATH=./vault>> .env
     echo.
     echo [OK] Configuration saved to .env

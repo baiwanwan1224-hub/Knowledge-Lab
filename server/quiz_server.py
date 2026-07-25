@@ -19,12 +19,32 @@ if os.path.exists(ENV_FILE):
                 k, v = line.split('=', 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
-# === CONFIG (all from env vars) ===
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
-if not DEEPSEEK_API_KEY:
-    print('[WARN] DEEPSEEK_API_KEY not set. Quiz generation/grading will fail.')
-DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
-DEEPSEEK_MODEL = 'deepseek-v4-pro'
+# === LLM CONFIG (provider-agnostic, change via .env) ===
+LLM_API_KEY = os.environ.get('LLM_API_KEY', os.environ.get('LLM_API_KEY', ''))
+LLM_API_URL = os.environ.get('LLM_API_URL', 'https://api.deepseek.com/v1/chat/completions')
+LLM_MODEL = os.environ.get('LLM_MODEL', 'deepseek-v4-pro')
+
+# Built-in presets (set LLM_PROVIDER to use):
+#   deepseek  → deepseek-v4-pro (default)
+#   openai    → gpt-4.1
+#   zhipu     → glm-4
+#   ollama    → qwen2.5:7b @ localhost
+# Or set LLM_API_URL + LLM_MODEL directly for any OpenAI-compatible API
+provider = os.environ.get('LLM_PROVIDER', '')
+PRESETS = {
+    'deepseek': ('https://api.deepseek.com/v1/chat/completions', 'deepseek-v4-pro'),
+    'deepseek-flash': ('https://api.deepseek.com/v1/chat/completions', 'deepseek-v4-flash'),
+    'openai': ('https://api.openai.com/v1/chat/completions', 'gpt-4.1'),
+    'zhipu': ('https://open.bigmodel.cn/api/paas/v4/chat/completions', 'glm-4'),
+    'ollama': ('http://localhost:11434/v1/chat/completions', 'qwen2.5:7b'),
+}
+if provider in PRESETS:
+    LLM_API_URL, LLM_MODEL = PRESETS[provider]
+
+if not LLM_API_KEY:
+    print('[WARN] LLM_API_KEY not set. Set in .env: LLM_API_KEY=sk-xxx')
+    print('[INFO] You can also set LLM_PROVIDER=deepseek|openai|zhipu|ollama')
+print(f'[LLM] {LLM_MODEL} @ {LLM_API_URL}')
 
 # PostgreSQL (optional)
 try:
@@ -434,8 +454,8 @@ class QuizHandler(BaseHTTPRequestHandler):
 ## 输出格式（严格JSON）
 {{"title":"标题","topics":["分类1"],"content":"笔记内容...","summary":"一句话摘要"}}"""
         try:
-            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
-                json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
+            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+                json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
             if resp.status_code != 200: self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return
             content = resp.json()['choices'][0]['message']['content'].strip()
             if content.startswith('```'): content = content.split('\n', 1)[1]
@@ -545,8 +565,8 @@ quality_score: unverified
 
 输出格式（严格JSON）：{{"title":"标题","topics":["分类1"],"content":"笔记...","summary":"摘要"}}"""
             try:
-                resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
-                    json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
+                resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+                    json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
                 if resp.status_code != 200:
                     results.append({'file': filename, 'error': f'LLM API error: {resp.status_code}'})
                     continue
@@ -642,8 +662,8 @@ quality_score: unverified
 {', '.join(sorted(existing_topics)) if existing_topics else 'AI技术理解, 产品设计能力, 商业化思维, 工程协作能力, 评测体系搭建, 数据驱动决策'}
 
 输出格式（严格JSON）：{{"title":"标题","topics":["分类1"],"content":"笔记...","summary":"摘要"}}"""
-            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
-                json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
+            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+                json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
             if resp.status_code != 200: self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return
             content = resp.json()['choices'][0]['message']['content'].strip()
             if content.startswith('```'): content = content.split('\n', 1)[1]
@@ -742,8 +762,8 @@ quality_score: whisper_auto
 最强领域：{strengths[0][0]}({strengths[0][1]}分), {strengths[1][0]}({strengths[1][1]}分)"""
         recommendation = ''
         try:
-            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
-                json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '简短直接，2-3句话。'}, {'role': 'user', 'content': rec_prompt}], 'temperature': 0.5, 'max_tokens': 200}, timeout=30)
+            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+                json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '简短直接，2-3句话。'}, {'role': 'user', 'content': rec_prompt}], 'temperature': 0.5, 'max_tokens': 200}, timeout=30)
             if resp.status_code == 200: recommendation = resp.json()['choices'][0]['message']['content'].strip()
         except: pass
         if not recommendation and weakest[0][1] < 40:

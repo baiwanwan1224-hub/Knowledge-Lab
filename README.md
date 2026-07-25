@@ -77,11 +77,25 @@ chmod +x start.sh
 ### Manual start
 
 ```bash
-echo "DEEPSEEK_API_KEY=sk-your-key" > .env
+# .env — choose your LLM provider
+echo "LLM_API_KEY=sk-your-key" > .env
+echo "LLM_PROVIDER=deepseek" >> .env   # or: openai | zhipu | ollama
 echo "VAULT_PATH=./vault" >> .env
 pip install -r requirements.txt
 python server/quiz_server.py --port 5050
 ```
+
+### Supported LLM Providers
+
+| Provider | LLM_PROVIDER | Model | API Key |
+|----------|:--:|------|------|
+| DeepSeek (default) | `deepseek` | deepseek-v4-pro | [Get Key](https://platform.deepseek.com) |
+| DeepSeek Flash | `deepseek-flash` | deepseek-v4-flash | Same as above |
+| OpenAI | `openai` | gpt-4.1 | [Get Key](https://platform.openai.com) |
+| Zhipu GLM | `zhipu` | glm-4 | [Get Key](https://open.bigmodel.cn) |
+| Ollama (local) | `ollama` | qwen2.5:7b | None (free) |
+
+Or set `LLM_API_URL` + `LLM_MODEL` directly for any OpenAI-compatible API.
 
 ### Optional: PostgreSQL
 

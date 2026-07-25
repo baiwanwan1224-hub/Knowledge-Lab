@@ -6,9 +6,9 @@ Usage: python quiz_generator.py --topic "产品需求分析" --count 5 --types s
 import sys, os, json, argparse, hashlib, requests
 from datetime import datetime
 
-DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
-DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
-DEEPSEEK_MODEL = 'deepseek-v4-pro'
+LLM_API_KEY = os.environ.get('LLM_API_KEY', os.environ.get('LLM_API_KEY', ''))
+LLM_API_URL = os.environ.get('LLM_API_URL', 'https://api.deepseek.com/v1/chat/completions')
+LLM_MODEL = os.environ.get('LLM_MODEL', 'deepseek-v4-pro')
 VAULT_PATH = os.environ.get('VAULT_PATH', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'vault'))
 NOTES_DIR = os.path.join(VAULT_PATH, '00_学习笔记')
 
@@ -69,7 +69,7 @@ def build_prompt(topic, count, types, difficulty, notes):
 直接输出JSON："""
 
 def call_llm(prompt):
-    resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}', 'Content-Type': 'application/json'},
+    resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
         json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '你是AI产品经理教学专家，严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.7, 'max_tokens': 4000}, timeout=120)
     if resp.status_code != 200: return {'error': f'API error {resp.status_code}: {resp.text}'}
     return resp.json()
