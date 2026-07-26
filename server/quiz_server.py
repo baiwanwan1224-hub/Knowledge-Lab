@@ -69,6 +69,10 @@ WRONG_DIR = os.path.join(VAULT_BASE, '01_错题本')
 STANDARDS_DIR = os.path.join(VAULT_BASE, '06_产品层')
 IMPORTS_LOG = os.path.join(VAULT_BASE, '03_测验报告', '_imports.jsonl')
 
+# Auto-create vault directories (survives .env loss)
+for _d in [NOTES_DIR, WRONG_DIR, STANDARDS_DIR, os.path.dirname(IMPORTS_LOG)]:
+    os.makedirs(_d, exist_ok=True)
+
 def log_import(import_type, source, title, topics, note_file):
     os.makedirs(os.path.dirname(IMPORTS_LOG), exist_ok=True)
     with open(IMPORTS_LOG, 'a', encoding='utf-8') as f:

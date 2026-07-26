@@ -52,6 +52,12 @@ echo.
 echo   Starting server...
 echo.
 
+:: Backup vault before starting (safety net)
+if exist "vault\00_学习笔记\*.md" (
+    echo   [BACKUP] Auto-backup vault...
+    call backup.bat >nul 2>&1
+)
+
 :: Load .env and start
 for /f "tokens=1,2 delims==" %%a in (.env) do set %%a=%%b
 start "" http://localhost:5050
