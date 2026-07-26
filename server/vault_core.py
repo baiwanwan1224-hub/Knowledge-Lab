@@ -9,14 +9,22 @@ from pathlib import Path
 # ── Config ──
 VAULT_DIR = Path(os.environ.get('VAULT_PATH', os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'vault')))
-NOTES_DIR = VAULT_DIR / '00_学习笔记'
-META_DIR = VAULT_DIR / '.vault-meta'
+# Notes live in Knowledge Lab/ subfolder within the vault (shared with Obsidian)
+NOTES_DIR = VAULT_DIR / 'Knowledge Lab' / '00_学习笔记'
+WRONG_DIR = VAULT_DIR / 'Knowledge Lab' / '01_错题本'
+STANDARDS_DIR = VAULT_DIR / 'Knowledge Lab' / '06_产品层'
+# Also scan Obsidian-managed folders for notes
+EXTRA_NOTE_DIRS = [
+    str(VAULT_DIR / 'Clippings'),
+    str(VAULT_DIR / '网页提取'),
+]
+META_DIR = VAULT_DIR / 'Knowledge Lab' / '.vault-meta'
 WAL_PATH = META_DIR / 'wal.log'
 INTEGRITY_DIR = META_DIR / 'integrity'
 LOCK_PATH = META_DIR / '.lock'
 
 # Ensure dirs
-for d in [NOTES_DIR, META_DIR, INTEGRITY_DIR]:
+for d in [NOTES_DIR, WRONG_DIR, STANDARDS_DIR, META_DIR, INTEGRITY_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 

@@ -9,6 +9,16 @@ from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+# Load .env FIRST (before vault_core import, so VAULT_PATH is available)
+_ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+if os.path.exists(_ENV_FILE):
+    with open(_ENV_FILE, 'r', encoding='utf-8') as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _v = _line.split('=', 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 # Vault core — atomic writes + WAL + integrity
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -42,16 +52,6 @@ except ImportError as e:
     def wal_replay(): return []
     def save_integrity_snapshot(): return {'note_count': 0, 'timestamp': 'N/A', 'files': {}}
     def verify_integrity(): return {'status': 'no_module', 'missing': [], 'changed': [], 'new': [], 'snapshot_used': None}
-
-# Load .env file if present (for zero-config startup)
-ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
-if os.path.exists(ENV_FILE):
-    with open(ENV_FILE, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                k, v = line.split('=', 1)
-                os.environ.setdefault(k.strip(), v.strip())
 
 # === LLM CONFIG (provider-agnostic, change via .env) ===
 LLM_API_KEY = os.environ.get('LLM_API_KEY', os.environ.get('LLM_API_KEY', ''))
@@ -97,9 +97,18 @@ PG_CONFIG = {
 
 # Paths · now sourced from vault_core or fallback above
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
-VAULT_BASE = VAULT_DIR
-IMPORTS_LOG = os.path.join(VAULT_BASE, '03_测验报告', '_imports.jsonl')
-os.makedirs(os.path.dirname(IMPORTS_LOG), exist_ok=True)
+VAULT_BASE = VAULT_DIR  # Obsidian vault root
+NOTES_DIR = os.path.join(VAULT_BASE, 'Knowledge Lab', '00_学习笔记')
+WRONG_DIR = os.path.join(VAULT_BASE, 'Knowledge Lab', '01_错题本')
+STANDARDS_DIR = os.path.join(VAULT_BASE, 'Knowledge Lab', '06_产品层')
+IMPORTS_LOG = os.path.join(VAULT_BASE, 'Knowledge Lab', '_imports.jsonl')
+# Also scan Clippings and other Obsidian-managed folders
+EXTRA_NOTE_DIRS = [
+    os.path.join(VAULT_BASE, 'Clippings'),
+    os.path.join(VAULT_BASE, '网页提取'),
+]
+for _d in [NOTES_DIR, WRONG_DIR, STANDARDS_DIR, os.path.dirname(IMPORTS_LOG)]:
+    os.makedirs(_d, exist_ok=True)
 
 def log_import(import_type, source, title, topics, note_file):
     os.makedirs(os.path.dirname(IMPORTS_LOG), exist_ok=True)
@@ -209,7 +218,11 @@ class QuizHandler(BaseHTTPRequestHandler):
         elif path == '/notes/verify': self._handle_verify_note(body)
         elif path == '/notes/delete': self._handle_delete_note(body)
         elif path == '/notes/transcribe': self._handle_transcribe(body)
-        elif path == '/notes/transcribe_xhs': self._handle_transcribe_xhs(body)
+        elif path == '/notes/import_xhs': self._handle_import_xhs(body)
+        elif path == '/notes/paste': self._handle_paste_text(body)
+        elif path == '/notes/parse_xhs_share': self._handle_parse_xhs_share(body)
+        elif path == '/notes/screenshot_ocr': self._handle_screenshot_ocr(body)
+        elif path == '/ingest': self._handle_webhook_ingest(body)
         else: self._send_json({'error': 'Not found', 'path': path}, 404)
 
     def do_GET(self):
@@ -290,39 +303,60 @@ class QuizHandler(BaseHTTPRequestHandler):
     def _handle_topics(self):
         topics = set(); note_count = 0
         try:
-            for f in os.listdir(NOTES_DIR):
-                if f.endswith('.md') and not f.startswith('模板'):
-                    note_count += 1
-                    try:
-                        with open(os.path.join(NOTES_DIR, f), 'r', encoding='utf-8') as fh:
-                            for line in fh:
-                                if line.startswith('topic:') or line.startswith('topics:'):
-                                    raw = line.split(':', 1)[1].strip().strip('"[]')
-                                    for t in raw.split(','): topics.add(t.strip())
-                                    break
-                    except: pass
+            for nd in [NOTES_DIR] + EXTRA_NOTE_DIRS:
+                if not os.path.exists(nd): continue
+                for f in os.listdir(nd):
+                    if f.endswith('.md') and not f.startswith('模板'):
+                        note_count += 1
+                        try:
+                            with open(os.path.join(nd, f), 'r', encoding='utf-8') as fh:
+                                for line in fh:
+                                    if line.startswith('topic:') or line.startswith('topics:'):
+                                        raw = line.split(':', 1)[1].strip().strip('"[]')
+                                        for t in raw.split(','): topics.add(t.strip())
+                                        break
+                        except: pass
             self._send_json({'topics': sorted(list(topics)), 'notes_count': note_count})
         except Exception as e:
             self._send_json({'error': str(e)}, 500)
 
     # -- Notes list --
-    def _handle_notes(self):
+    def _scan_notes(self):
+        """Scan all note directories and return list of note dicts."""
         notes = []
-        try:
-            for fname in sorted(os.listdir(NOTES_DIR), reverse=True):
-                if fname.endswith('.md') and not fname.startswith('模板'):
-                    fpath = os.path.join(NOTES_DIR, fname)
+        for scan_dir in [NOTES_DIR] + EXTRA_NOTE_DIRS:
+            if not os.path.exists(scan_dir): continue
+            for fname in sorted(os.listdir(scan_dir), reverse=True):
+                if not fname.endswith('.md'): continue
+                if fname.startswith('模板'): continue
+                fpath = os.path.join(scan_dir, fname)
+                try:
                     with open(fpath, 'r', encoding='utf-8') as fh: content = fh.read()
-                    title = fname.replace('.md', ''); topics = []; status = 'ready'
-                    for line in content.split('\n'):
-                        if line.startswith('topic:') or line.startswith('topics:'):
-                            raw = line.split(':', 1)[1].strip().strip('"[]')
-                            topics = [t.strip() for t in raw.split(',') if t.strip()]
-                        if line.startswith('status:'): status = line.split(':', 1)[1].strip()
-                        if line.startswith('# '): title = line[2:].strip()
-                    body = content.split('---', 2)[-1] if content.startswith('---') else content
-                    preview = body.strip()[:200].replace('\n', ' ')
-                    notes.append({'title': title, 'file': fname, 'topics': topics, 'status': status, 'preview': preview, 'path': fname})
+                except: continue
+                title = fname.replace('.md', ''); topics = []; status = 'ready'; source = ''; author = ''
+                for line in content.split('\n'):
+                    if line.startswith('topic:') or line.startswith('topics:'):
+                        raw = line.split(':', 1)[1].strip().strip('"[]')
+                        topics = [t.strip() for t in raw.split(',') if t.strip()]
+                    if line.startswith('status:'): status = line.split(':', 1)[1].strip()
+                    if line.startswith('source:'): source = line.split(':', 1)[1].strip()
+                    if line.startswith('author:'): author = line.split(':', 1)[1].strip()
+                    if line.startswith('# ') and title == fname.replace('.md', ''):
+                        title = line[2:].strip()
+                body = content.split('---', 2)[-1] if content.startswith('---') else content
+                preview = body.strip()[:200].replace('\n', ' ')
+                mtime = os.path.getmtime(fpath)
+                notes.append({'title': title, 'file': fname, 'topics': topics,
+                              'status': status, 'preview': preview, 'path': fname,
+                              'source': source, 'author': author,
+                              'scan_dir': os.path.basename(scan_dir),
+                              'dir': os.path.basename(scan_dir),
+                              'mtime': mtime, 'date_str': datetime.fromtimestamp(mtime).strftime('%Y%m%d')})
+        return notes
+
+    def _handle_notes(self):
+        try:
+            notes = self._scan_notes()
             self._send_json({'notes': notes, 'total': len(notes)})
         except Exception as e:
             self._send_json({'error': str(e)}, 500)
@@ -330,10 +364,22 @@ class QuizHandler(BaseHTTPRequestHandler):
     # -- Note detail --
     def _handle_note(self, parsed):
         params = parse_qs(parsed.query); note_path = params.get('path', [None])[0]
+        note_dir = params.get('dir', [None])[0]
         if not note_path: self._send_json({'error': 'Missing ?path=filename.md'}, 400); return
-        full_path = os.path.join(NOTES_DIR, note_path)
-        if not os.path.realpath(full_path).startswith(os.path.realpath(NOTES_DIR)):
-            self._send_json({'error': 'Invalid path'}, 403); return
+        # Search across all note directories, prioritize specified dir
+        full_path = None
+        search_dirs = [NOTES_DIR] + EXTRA_NOTE_DIRS
+        if note_dir:
+            # Put the matching dir first
+            matching = [d for d in search_dirs if os.path.basename(d) == note_dir]
+            search_dirs = matching + [d for d in search_dirs if d not in matching]
+        for nd in search_dirs:
+            candidate = os.path.join(nd, note_path)
+            if os.path.exists(candidate): full_path = candidate; break
+        if not full_path:
+            full_path = os.path.join(NOTES_DIR, note_path)  # fallback
+        if not os.path.exists(full_path):
+            self._send_json({'error': 'Note not found'}, 404); return
         try:
             with open(full_path, 'r', encoding='utf-8') as fh: content = fh.read()
             fm = {}; body = content
@@ -353,23 +399,26 @@ class QuizHandler(BaseHTTPRequestHandler):
     def _handle_verify_note(self, body):
         file_name = body.get('file', '').strip(); action = body.get('action', 'approve')
         if not file_name: self._send_json({'error': 'Missing file'}, 400); return
-        fpath = os.path.join(NOTES_DIR, file_name)
-        if not os.path.exists(fpath): self._send_json({'error': f'Note not found: {file_name}'}, 404); return
+        fpath = None
+        for nd in [NOTES_DIR] + EXTRA_NOTE_DIRS:
+            candidate = os.path.join(nd, file_name)
+            if os.path.exists(candidate): fpath = candidate; break
+        if not fpath: self._send_json({'error': f'Note not found: {file_name}'}, 404); return
         try:
-            with open(fpath, 'r', encoding='utf-8') as f: content = f.read()
+            with open(fpath, 'r', encoding='utf-8') as f: fc = f.read()
             if action == 'approve':
-                new_content = re.sub(r'status:\s*draft', 'status: ready', content)
-                new_content = re.sub(r'verified:\s*.*', f'verified: {datetime.now().strftime("%Y-%m-%d")}', new_content)
-                if 'verified:' not in new_content: new_content = new_content.replace('status: ready', f'status: ready\nverified: {datetime.now().strftime("%Y-%m-%d")}')
+                fc = re.sub(r'status:\s*draft', 'status: ready', fc)
+                fc = re.sub(r'status:\s*imported', 'status: ready', fc)
             elif action == 'reject':
-                new_content = re.sub(r'status:\s*draft', 'status: needs_revision', content)
+                fc = re.sub(r'status:\s*draft', 'status: needs_revision', fc)
             else:
                 self._send_json({'error': f'Unknown action: {action}'}, 400); return
-            with open(fpath, 'w', encoding='utf-8') as f: f.write(new_content)
-            self._send_json({'status': 'success', 'file': file_name, 'new_status': 'ready' if action == 'approve' else 'needs_revision'})
+            if not safe_save_note(os.path.basename(fpath), fc):
+                with open(fpath, 'w', encoding='utf-8') as f: f.write(fc)
+            save_integrity_snapshot()
+            self._send_json({'status': 'ok', 'file': file_name})
         except Exception as e:
             self._send_json({'error': str(e)}, 500)
-
     # -- Delete note --
     def _handle_delete_note(self, body):
         file_name = body.get('file', '').strip()
@@ -439,8 +488,16 @@ class QuizHandler(BaseHTTPRequestHandler):
             if video_id:
                 try:
                     from youtube_transcript_api import YouTubeTranscriptApi
-                    transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['zh-Hans', 'zh', 'en'])
-                    transcript_text = ' '.join([t['text'] for t in transcript])
+                    api = YouTubeTranscriptApi()
+                    # Pass cookies to bypass YouTube IP block
+                    cookies_file = os.path.join(os.path.dirname(SCRIPTS_DIR), 'cookies.txt')
+                    if os.path.exists(cookies_file):
+                        import http.cookiejar
+                        cj = http.cookiejar.MozillaCookieJar(cookies_file)
+                        cj.load()
+                        api = YouTubeTranscriptApi(cookies=cj)
+                    transcript = api.fetch(video_id, languages=['zh-Hans', 'zh', 'en'])
+                    transcript_text = ' '.join([t.text for t in transcript])
                 except: pass
             title_match = re.search(r'<meta\s+name="title"\s+content="([^"]+)"', html, re.IGNORECASE)
             if not title_match: title_match = re.search(r'<title>([^<]+)</title>', html, re.IGNORECASE)
@@ -487,7 +544,7 @@ class QuizHandler(BaseHTTPRequestHandler):
 ## 输出格式（严格JSON）
 {{"title":"标题","topics":["分类1"],"content":"笔记内容...","summary":"一句话摘要"}}"""
         try:
-            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+            resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
                 json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
             if resp.status_code != 200: self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return
             content = resp.json()['choices'][0]['message']['content'].strip()
@@ -599,7 +656,7 @@ quality_score: unverified
 
 输出格式（严格JSON）：{{"title":"标题","topics":["分类1"],"content":"笔记...","summary":"摘要"}}"""
             try:
-                resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+                resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
                     json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
                 if resp.status_code != 200:
                     results.append({'file': filename, 'error': f'LLM API error: {resp.status_code}'})
@@ -635,8 +692,10 @@ quality_score: unverified
 
 {data.get('content', text[:3000])}
 """
-            note_filename = make_note_filename('LOCAL', data.get('title', fn), note)
-            if not safe_save_note(note_filename, note): continue
+            note_filename = make_note_filename('LOCAL', data.get('title', 'Imported'), note)
+            if not safe_save_note(note_filename, note):
+                results.append({'file': filename, 'error': '保存文件失败'})
+                continue
             log_import('本地文件', f'文件: {filename}', data.get('title', ''), topics, note_filename)
             results.append({'file': filename, 'status': 'success', 'title': data.get('title', ''), 'topics': topics, 'note_file': note_filename})
 
@@ -653,16 +712,31 @@ quality_score: unverified
         try:
             try:
                 import yt_dlp
-                with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                info_opts = {'quiet': True}
+                if cookies_file: info_opts['cookiefile'] = cookies_file
+                with yt_dlp.YoutubeDL(info_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
                     title = info.get('title', '转录笔记')[:80]
             except: pass
+            # Look for cookies file for YouTube auth bypass
+            cookies_file = os.path.join(os.path.dirname(SCRIPTS_DIR), 'cookies.txt')
+            if not os.path.exists(cookies_file):
+                cookies_file = None  # fallback: try without cookies
+
             audio_path = os.path.join(tempfile.gettempdir(), f'whisper_audio_{uuid.uuid4().hex[:8]}.wav')
             try:
-                opts = {'format': 'bestaudio/best', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav'}], 'outtmpl': audio_path.replace('.wav', ''), 'quiet': True}
+                opts = {
+                    'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                    'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'wav'}],
+                    'outtmpl': audio_path.replace('.wav', ''),
+                    'quiet': True,
+                    'extract_audio': True,
+                }
+                if cookies_file:
+                    opts['cookiefile'] = cookies_file
                 with yt_dlp.YoutubeDL(opts) as ydl: ydl.download([url])
                 base = audio_path.replace('.wav', '')
-                for ext in ['.wav', '.m4a', '.opus', '.webm']:
+                for ext in ['.wav', '.m4a', '.opus', '.webm', '.mp4', '.mka', '.ogg']:
                     if os.path.exists(base + ext): audio_path = base + ext; break
             except Exception as e:
                 self._send_json({'error': f'音频下载失败：{str(e)[:150]}'}, 500); return
@@ -674,16 +748,18 @@ quality_score: unverified
             if not transcript or len(transcript.strip()) < 20:
                 self._send_json({'error': '未能识别到有效语音内容'}, 422); return
             existing_topics = set()
-            for fname in os.listdir(NOTES_DIR):
-                if fname.endswith('.md') and not fname.startswith('模板'):
-                    try:
-                        with open(os.path.join(NOTES_DIR, fname), 'r', encoding='utf-8') as fh:
-                            for line in fh:
-                                if line.startswith('topic:') or line.startswith('topics:'):
-                                    for t in line.split(':', 1)[1].strip().strip('"[]').split(','):
-                                        if t.strip(): existing_topics.add(t.strip())
-                                    break
-                    except: pass
+            for nd in [NOTES_DIR] + EXTRA_NOTE_DIRS:
+                if not os.path.exists(nd): continue
+                for fname in os.listdir(nd):
+                    if fname.endswith('.md') and not fname.startswith('模板'):
+                        try:
+                            with open(os.path.join(nd, fname), 'r', encoding='utf-8') as fh:
+                                for line in fh:
+                                    if line.startswith('topic:') or line.startswith('topics:'):
+                                        for t in line.split(':', 1)[1].strip().strip('"[]').split(','):
+                                            if t.strip(): existing_topics.add(t.strip())
+                                        break
+                        except: pass
             prompt = f"""你是知识管理助手。请阅读以下视频转录内容，整理为一篇学习笔记。
 
 ## 视频标题
@@ -696,7 +772,7 @@ quality_score: unverified
 {', '.join(sorted(existing_topics)) if existing_topics else 'AI技术理解, 产品设计能力, 商业化思维, 工程协作能力, 评测体系搭建, 数据驱动决策'}
 
 输出格式（严格JSON）：{{"title":"标题","topics":["分类1"],"content":"笔记...","summary":"摘要"}}"""
-            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+            resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
                 json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
             if resp.status_code != 200: self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return
             content = resp.json()['choices'][0]['message']['content'].strip()
@@ -739,212 +815,258 @@ quality_score: whisper_auto
                 try: os.remove(audio_path)
                 except: pass
 
-    # -- Xiaohongshu transcribe (subtitle-first, Whisper fallback) --
-    def _handle_transcribe_xhs(self, body):
+    def _handle_import_xhs(self, body):
         url = body.get('url', '').strip()
+        user_text = body.get('text', '').strip()
         if not url:
-            self._send_json({'error': '请提供小红书视频链接'}, 400); return
-        is_xhs = 'xiaohongshu.com' in url or 'xhslink.com' in url
-        if not is_xhs:
-            self._send_json({'error': '目前仅支持小红书(xiaohongshu.com)视频链接'}, 400); return
+            self._send_json({'error': '请提供小红书链接'}, 400); return
 
-        video_path = None; audio_path = None; title = '小红书视频'
-        try:
-            # -- Step 1: Download video via yt-dlp --
-            try:
-                import yt_dlp
-                uid = uuid.uuid4().hex[:8]
-                video_path = os.path.join(tempfile.gettempdir(), f'xhs_video_{uid}.mp4')
-
-                # Get video info first
-                with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    title = (info.get('title') or info.get('description') or '小红书视频')[:80]
-
-                # Download with subtitles if available
-                opts = {
-                    'format': 'bestvideo+bestaudio/best',
-                    'outtmpl': video_path.replace('.mp4', ''),
-                    'writesubtitles': True,
-                    'writeautomaticsub': True,
-                    'subtitleslangs': ['zh-Hans', 'zh', 'en'],
-                    'subtitlesformat': 'srt',
-                    'quiet': True,
-                }
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    ydl.download([url])
-
-                # Find actual downloaded file
-                base = video_path.replace('.mp4', '')
-                for ext in ['.mp4', '.mkv', '.webm', '.m4a']:
-                    if os.path.exists(base + ext):
-                        video_path = base + ext; break
-            except Exception as e:
-                self._send_json({'error': f'视频下载失败：{str(e)[:150]}'}, 500); return
-
-            if not os.path.exists(video_path):
-                self._send_json({'error': '视频文件下载后未找到'}, 500); return
-
-            # -- Step 2: Try subtitle extraction first --
-            subtitle_text = self._extract_subtitles(video_path)
-            source_type = '内嵌字幕'
-
-            if not subtitle_text or len(subtitle_text.strip()) < 20:
-                # -- Step 3: Fallback to Whisper --
-                source_type = 'Whisper转录'
-                import subprocess as sp
-                audio_path = os.path.join(tempfile.gettempdir(), f'xhs_audio_{uid}.wav')
-                sp.run(['ffmpeg', '-i', video_path, '-vn', '-acodec', 'pcm_s16le',
-                        '-ar', '16000', '-ac', '1', audio_path, '-y'],
-                       capture_output=True, timeout=120)
-
-                if not os.path.exists(audio_path):
-                    self._send_json({'error': '音频提取失败'}, 500); return
-
-                from faster_whisper import WhisperModel
-                model = WhisperModel('tiny', device='cpu', compute_type='int8')
-                segments, _ = model.transcribe(audio_path, beam_size=5, language=None)
-                subtitle_text = ' '.join([seg.text for seg in segments])
-
-                if not subtitle_text or len(subtitle_text.strip()) < 20:
-                    self._send_json({'error': '未能识别到有效语音内容，视频可能为纯画面无配音'}, 422); return
-
-            # -- Step 4: LLM generates structured note --
-            note_data = self._generate_note_from_transcript(title, subtitle_text, url, source_type)
-            if not note_data:
-                return  # error already sent
-
-            # -- Step 5: Atomic save --
-            note_filename = make_note_filename('XHS', note_data.get('title', title), note_data.get('content', ''))
-            note = f"""---
-type: study-note
-source: 小红书视频
-source_url: {url}
-topic: {note_data.get('topics', ['小红书'])[0]}
-topics: {json.dumps(note_data.get('topics', ['小红书']), ensure_ascii=False)}
-difficulty: medium
-status: draft
-created: {datetime.now().strftime('%Y-%m-%d')}
-imported: {datetime.now().isoformat()}
-quality_score: {source_type}
----
-
-# {note_data.get('title', title)}
-
-> 来源：小红书视频 · {url}
-> 提取方式：{source_type}
-> 状态：待确认（draft）
-
-{note_data.get('content', subtitle_text[:3000])}
-"""
-            if not safe_save_note(note_filename, note):
-                self._send_json({'error': '保存笔记失败'}, 500); return
-
-            log_import('小红书视频', url, note_data.get('title', title),
-                       note_data.get('topics', []), note_filename)
+        # Xiaohongshu blocks server-side access. User must paste the content manually.
+        if not user_text:
             self._send_json({
-                'status': 'success',
-                'title': note_data.get('title', title),
-                'topics': note_data.get('topics', []),
-                'file': note_filename,
-                'source_type': source_type,
-                'transcript_length': len(subtitle_text),
-            })
-        except Exception as e:
-            self._send_json({'error': f'处理失败：{str(e)[:200]}'}, 500)
-        finally:
-            for p in [video_path, audio_path]:
-                if p and os.path.exists(p):
-                    try: os.remove(p)
-                    except: pass
+                'error': '小红书禁止服务器端访问内容。请在小红书App中复制笔记/视频的文案内容，粘贴到下方文本框后重试。',
+                'needs_content': True
+            }, 422); return
 
-    def _extract_subtitles(self, video_path):
-        """Extract embedded subtitles from video using ffmpeg."""
         try:
-            srt_path = video_path + '.srt'
-            base = video_path.rsplit('.', 1)[0]
-            # Check for pre-downloaded subtitle files by yt-dlp
-            for ext in ['.zh-Hans.srt', '.zh.srt', '.en.srt', '.srt']:
-                candidate = base + ext
-                if os.path.exists(candidate):
-                    with open(candidate, 'r', encoding='utf-8') as f:
-                        raw = f.read()
-                    return self._clean_srt(raw)
+            # Use LLM to structure the user-provided content
+            existing_topics = set()
+            for nd in [NOTES_DIR] + EXTRA_NOTE_DIRS:
+                if not os.path.exists(nd): continue
+                for fname in os.listdir(nd):
+                    if fname.endswith('.md') and not fname.startswith('模板'):
+                        try:
+                            with open(os.path.join(nd, fname), 'r', encoding='utf-8') as fh:
+                                for line in fh:
+                                    if line.startswith('topic:') or line.startswith('topics:'):
+                                        for t in line.split(':', 1)[1].strip().strip('"[]').split(','):
+                                            if t.strip(): existing_topics.add(t.strip())
+                                        break
+                        except: pass
 
-            # Try extracting embedded subtitle streams via ffmpeg
-            import subprocess as sp
-            # First check which subtitle streams exist
-            probe = sp.run(['ffprobe', '-v', 'quiet', '-print_format', 'json',
-                           '-show_streams', video_path], capture_output=True, text=True, timeout=30)
-            streams = json.loads(probe.stdout).get('streams', [])
-            sub_streams = [s for s in streams if s.get('codec_type') == 'subtitle']
-            if sub_streams:
-                idx = sub_streams[0]['index']
-                sp.run(['ffmpeg', '-i', video_path, '-map', f'0:{idx}',
-                        srt_path, '-y'], capture_output=True, timeout=60)
-                if os.path.exists(srt_path):
-                    with open(srt_path, 'r', encoding='utf-8') as f:
-                        raw = f.read()
-                    text = self._clean_srt(raw)
-                    try: os.remove(srt_path)
-                    except: pass
-                    return text
-            return ''
-        except:
-            return ''
+            prompt = f"""你是知识管理助手。请根据用户粘贴的小红书内容，整理为一篇结构化学习笔记。
 
-    def _clean_srt(self, raw_srt):
-        """Strip SRT timestamps and index numbers, return plain text."""
-        lines = []
-        for line in raw_srt.split('\n'):
-            line = line.strip()
-            if not line or line.isdigit(): continue
-            if '-->' in line: continue
-            lines.append(line)
-        return ' '.join(lines)
+URL（来源标记）: {url}
 
-    def _generate_note_from_transcript(self, title, transcript, url, source_type):
-        """Send transcript to LLM, return {'title','topics','content','summary'}."""
-        existing_topics = set()
-        if os.path.exists(NOTES_DIR):
-            for fname in os.listdir(NOTES_DIR):
-                if fname.endswith('.md') and not fname.startswith('模板'):
-                    try:
-                        with open(os.path.join(NOTES_DIR, fname), 'r', encoding='utf-8') as fh:
-                            for line in fh:
-                                if line.startswith('topic:') or line.startswith('topics:'):
-                                    for t in line.split(':', 1)[1].strip().strip('"[]').split(','):
-                                        if t.strip(): existing_topics.add(t.strip())
-                                    break
-                    except: pass
+用户粘贴的内容:
+{user_text[:5000]}
 
-        prompt = f"""你是知识管理助手。请阅读以下{source_type}内容，整理为一篇结构化学习笔记。
+现有主题：{', '.join(sorted(existing_topics)) if existing_topics else 'AI技术理解, 产品设计能力, 商业化思维, 工程协作能力, 评测体系搭建, 数据驱动决策'}
 
-## 视频标题
-{title}
+输出JSON：{{"title":"笔记标题","topics":["分类1"],"content":"结构化笔记内容","summary":"一句话摘要"}}"""
 
-## {source_type}内容
-{transcript[:6000]}
-
-## 现有主题
-{', '.join(sorted(existing_topics)) if existing_topics else 'AI技术理解, 产品设计能力, 商业化思维, 工程协作能力, 评测体系搭建, 数据驱动决策'}
-
-输出格式（严格JSON）：{{"title":"标题","topics":["分类1"],"content":"笔记(保留关键信息、金句、数据)","summary":"一句话摘要"}}"""
-        try:
-            resp = requests.post(DEEPSEEK_API_URL,
+            resp = requests.post(LLM_API_URL,
                 headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
                 json={'model': LLM_MODEL,
                       'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'},
                                    {'role': 'user', 'content': prompt}],
-                      'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
+                      'temperature': 0.3, 'max_tokens': 4000}, timeout=60)
+
             if resp.status_code != 200:
-                self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return None
-            content = resp.json()['choices'][0]['message']['content'].strip()
-            if content.startswith('```'): content = content.split('\n', 1)[1]
-            if content.endswith('```'): content = content[:-3]
-            return json.loads(content)
+                self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return
+
+            raw = resp.json()['choices'][0]['message']['content'].strip()
+            if raw.startswith('```'): raw = raw.split('\n', 1)[1]
+            if raw.endswith('```'): raw = raw[:-3]
+            data = json.loads(raw)
+            topics = data.get('topics', ['小红书'])
+
+            note = f"""---
+type: study-note
+source: 小红书
+source_url: {url}
+topic: {topics[0]}
+topics: {json.dumps(topics, ensure_ascii=False)}
+difficulty: medium
+status: draft
+created: {datetime.now().strftime('%Y-%m-%d')}
+imported: {datetime.now().isoformat()}
+quality_score: 用户提供内容+AI整理
+---
+
+# {data.get('title', '小红书笔记')}
+
+> 来源：小红书 · {url}
+> 内容提供：用户手动粘贴 · AI 结构化整理
+> 状态：待确认（draft）
+
+{data.get('content', user_text[:3000])}
+"""
+            note_filename = make_note_filename('XHS', data.get('title', 'Imported'), note)
+            if not safe_save_note(note_filename, note):
+                self._send_json({'error': '保存笔记失败'}, 500); return
+
+            log_import('小红书', url, data.get('title', ''), topics, note_filename)
+            self._send_json({'status': 'success', 'title': data.get('title', ''),
+                           'topics': topics, 'file': note_filename,
+                           'transcript_length': len(user_text)})
         except Exception as e:
-            self._send_json({'error': f'LLM处理失败：{str(e)[:150]}'}, 500); return None
+            self._send_json({'error': f'小红书导入失败：{str(e)[:150]}'}, 500)
+
+    # -- Parse Xiaohongshu share text --
+    # -- Paste text import --
+    def _handle_paste_text(self, body):
+        text = body.get('text', '').strip()
+        if not text or len(text) < 50:
+            self._send_json({'error': '请粘贴至少50字的内容'}, 400); return
+
+        try:
+            existing_topics = set()
+            for nd in [NOTES_DIR] + EXTRA_NOTE_DIRS:
+                if not os.path.exists(nd): continue
+                for fname in os.listdir(nd):
+                    if fname.endswith('.md') and not fname.startswith('模板'):
+                        try:
+                            with open(os.path.join(nd, fname), 'r', encoding='utf-8') as fh:
+                                for line in fh:
+                                    if line.startswith('topic:') or line.startswith('topics:'):
+                                        for t in line.split(':', 1)[1].strip().strip('"[]').split(','):
+                                            if t.strip(): existing_topics.add(t.strip())
+                                        break
+                        except: pass
+
+            prompt = f"""你是知识管理助手。请阅读以下用户粘贴的内容，整理为一篇结构化学习笔记。
+自动生成合适的标题，归类到现有主题，保留关键信息。
+
+内容：
+{text[:200000]}
+
+现有主题：{', '.join(sorted(existing_topics)) if existing_topics else 'AI技术理解, 产品设计能力, 商业化思维, 工程协作能力, 评测体系搭建, 数据驱动决策'}
+
+输出JSON：{{"title":"标题","topics":["分类1"],"content":"结构化笔记","summary":"一句话摘要"}}"""
+
+            resp = requests.post(LLM_API_URL,
+                headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+                json={'model': LLM_MODEL,
+                      'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'},
+                                   {'role': 'user', 'content': prompt}],
+                      'temperature': 0.3, 'max_tokens': 16000}, timeout=300)
+
+            if resp.status_code != 200:
+                self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return
+
+            raw = resp.json()['choices'][0]['message']['content'].strip()
+            if raw.startswith('```'): raw = raw.split('\n', 1)[1]
+            if raw.endswith('```'): raw = raw[:-3]
+            data = json.loads(raw)
+            topics = data.get('topics', ['AI产品经理'])
+
+            note = f"""---
+type: study-note
+source: 手动粘贴
+topic: {topics[0]}
+topics: {json.dumps(topics, ensure_ascii=False)}
+difficulty: medium
+status: draft
+created: {datetime.now().strftime('%Y-%m-%d')}
+imported: {datetime.now().isoformat()}
+quality_score: unverified
+---
+
+# {data.get('title', '未命名笔记')}
+
+> 来源：手动粘贴
+> 状态：待确认（draft）
+
+{data.get('content', text[:80000])}
+"""
+            note_filename = make_note_filename('NOTE', data.get('title', 'Pasted'), note)
+            if not safe_save_note(note_filename, note):
+                self._send_json({'error': '保存笔记失败'}, 500); return
+
+            log_import('手动粘贴', '', data.get('title', ''), topics, note_filename)
+            self._send_json({'status': 'success', 'title': data.get('title', ''),
+                           'topics': topics, 'file': note_filename, 'length': len(text)})
+        except Exception as e:
+            self._send_json({'error': f'处理失败：{str(e)[:150]}'}, 500)
+
+    def _handle_parse_xhs_share(self, body):
+        """Parse XHS share format: 【Title】Description https://url... → auto-fill form"""
+        text = body.get('text', '').strip()
+        if not text:
+            self._send_json({'error': '请粘贴小红书分享文本'}, 400); return
+        result = {'title': '', 'desc': '', 'url': ''}
+        # Format 1: 【Title】Description https://www.xiaohongshu.com/...
+        m = re.search(r'【(.+?)】\s*(.+?)\s*(https?://(?:www\.)?xiaohongshu\.com/\S+)', text)
+        if m:
+            result = {'title': m.group(1), 'desc': m.group(2).strip()[:200], 'url': m.group(3).split('?')[0]}
+        else:
+            # Format 2: Just URL
+            m2 = re.search(r'(https?://(?:www\.)?xiaohongshu\.com/\S+)', text)
+            if m2:
+                result = {'url': m2.group(1).split('?')[0], 'desc': text.replace(m2.group(1), '').strip()[:200]}
+            else:
+                result = {'desc': text[:200]}
+        self._send_json({'status': 'success', **result})
+
+    # -- Screenshot OCR (M3 multimodal) --
+    def _handle_screenshot_ocr(self, body):
+        """Accept base64 image, call M3 to extract text (subtitles/captions)."""
+        import base64 as _b64
+        img_data = body.get('image', '')
+        if not img_data:
+            self._send_json({'error': '请提供base64编码的截图'}, 400); return
+        if img_data.startswith('data:'):
+            img_data = img_data.split(',', 1)[1]
+        try:
+            resp = requests.post(
+                'https://api.minimaxi.com/v1/chat/completions',
+                headers={'Authorization': f'Bearer {os.environ.get("MINIMAX_API_KEY", "")}',
+                         'Content-Type': 'application/json'},
+                json={'model': 'MiniMax-M3',
+                      'messages': [{'role': 'user', 'content': [
+                          {'type': 'text', 'text': '逐字提取这张截图中的所有文字内容，保留换行。如果是视频字幕，按时间顺序提取。'},
+                          {'type': 'image_url', 'image_url': {'url': f'data:image/png;base64,{img_data}'}}
+                      ]}],
+                      'max_tokens': 2000, 'temperature': 0.1},
+                timeout=60)
+            if resp.status_code != 200:
+                self._send_json({'error': f'M3 API error: {resp.status_code}'}, 500); return
+            text = resp.json()['choices'][0]['message']['content'].strip()
+            # Strip think tags
+            text = re.sub(r'</?think>', '', text)
+            self._send_json({'status': 'success', 'text': text, 'length': len(text)})
+        except Exception as e:
+            self._send_json({'error': f'OCR失败：{str(e)[:150]}'}, 500)
+
+    # -- Webhook endpoint for iOS Shortcuts --
+    def _handle_webhook_ingest(self, body):
+        """Receive content from iOS Shortcuts and auto-create note."""
+        text = body.get('text', '').strip()
+        source_url = body.get('url', '').strip()
+        if not text:
+            self._send_json({'error': '请提供文本内容'}, 400); return
+        title = body.get('title', '快捷指令导入')[:80]
+        topics = body.get('topics', ['快捷指令'])
+        if isinstance(topics, str): topics = [t.strip() for t in topics.split(',') if t.strip()]
+
+        note = f"""---
+type: study-note
+source: iOS快捷指令
+source_url: {source_url}
+topic: {topics[0] if topics else '快捷指令'}
+topics: {json.dumps(topics, ensure_ascii=False)}
+difficulty: medium
+status: draft
+created: {datetime.now().strftime('%Y-%m-%d')}
+imported: {datetime.now().isoformat()}
+quality_score: quick_capture
+---
+
+# {title}
+
+> 来源：iOS 快捷指令 · {source_url if source_url else '手动输入'}
+> 状态：待确认（draft）
+
+{text[:5000]}
+"""
+        note_filename = make_note_filename('QUICK', title, text)
+        if not safe_save_note(note_filename, note):
+            self._send_json({'error': '保存笔记失败'}, 500); return
+        log_import('iOS快捷指令', source_url, title, topics, note_filename)
+        save_integrity_snapshot()
+        self._send_json({'status': 'success', 'title': title, 'topics': topics,
+                         'file': note_filename, 'length': len(text)})
 
     # -- Competency --
     COMPETENCY_DIMS = {
@@ -1004,7 +1126,7 @@ quality_score: {source_type}
 最强领域：{strengths[0][0]}({strengths[0][1]}分), {strengths[1][0]}({strengths[1][1]}分)"""
         recommendation = ''
         try:
-            resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+            resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
                 json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '简短直接，2-3句话。'}, {'role': 'user', 'content': rec_prompt}], 'temperature': 0.5, 'max_tokens': 200}, timeout=30)
             if resp.status_code == 200: recommendation = resp.json()['choices'][0]['message']['content'].strip()
         except: pass
@@ -1057,7 +1179,10 @@ quality_score: {source_type}
         if os.path.exists(WRONG_DIR):
             for root, dirs, files in os.walk(WRONG_DIR):
                 wrong_count += len([f for f in files if f.endswith('.md') and not f.startswith('模板')])
-        note_count = len([f for f in os.listdir(NOTES_DIR) if f.endswith('.md') and not f.startswith('模板')]) if os.path.exists(NOTES_DIR) else 0
+        note_count = 0
+        for nd in [NOTES_DIR] + EXTRA_NOTE_DIRS:
+            if os.path.exists(nd):
+                note_count += len([f for f in os.listdir(nd) if f.endswith('.md') and not f.startswith('模板')])
         self._send_json({'stats': stats, 'notes_count': note_count, 'wrong_answers_count': wrong_count, 'topic_mastery': topic_rows, 'pg_connected': HAS_PG})
 
     def log_message(self, format, *args):
@@ -1073,8 +1198,9 @@ def main():
         print(f'  Recovered {len(orphaned)} incomplete writes: {orphaned}')
 
     integrity = verify_integrity()
-    note_count = len(integrity.get('new', [])) if integrity['status'] == 'no_snapshot' else \
-        len([f for f in os.listdir(NOTES_DIR) if f.endswith('.md') and not f.startswith('模板_')]) if os.path.exists(NOTES_DIR) else 0
+    note_count = len(integrity.get('new', [])) if integrity['status'] == 'no_snapshot' else sum(
+        len([f for f in os.listdir(nd) if f.endswith('.md') and not f.startswith('模板_')])
+        for nd in [NOTES_DIR] + EXTRA_NOTE_DIRS if os.path.exists(nd))
 
     print(f'Knowledge Lab API v4 · http://localhost:{port}')
     print(f'Vault: {VAULT_BASE} ({note_count} notes) : Integrity {integrity.get("status", "?")}')

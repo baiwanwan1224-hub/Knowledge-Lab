@@ -2,6 +2,7 @@
 .env
 *.key
 *secret*
+cookies.txt
 
 # Python
 __pycache__/

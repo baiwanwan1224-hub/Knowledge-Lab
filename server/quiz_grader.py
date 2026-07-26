@@ -6,11 +6,21 @@ Usage: python quiz_grader.py --input-file /tmp/session.json
 import sys, os, json, argparse, requests
 from datetime import datetime, timedelta
 
+# Load .env first
+_ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+if os.path.exists(_ENV_FILE):
+    with open(_ENV_FILE, 'r', encoding='utf-8') as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _v = _line.split('=', 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 LLM_API_KEY = os.environ.get('LLM_API_KEY', os.environ.get('LLM_API_KEY', ''))
 LLM_API_URL = os.environ.get('LLM_API_URL', 'https://api.deepseek.com/v1/chat/completions')
 LLM_MODEL = os.environ.get('LLM_MODEL', 'deepseek-v4-pro')
 VAULT_PATH = os.environ.get('VAULT_PATH', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'vault'))
-WRONG_ANSWER_DIR = os.path.join(VAULT_PATH, '01_错题本')
+WRONG_ANSWER_DIR = os.path.join(VAULT_PATH, 'Knowledge Lab', '01_错题本')
 
 def grade_answer(question, user_answer):
     q_type = question.get('type', 'short_answer'); correct = question.get('correct_answer', '')
@@ -30,8 +40,8 @@ def grade_answer(question, user_answer):
 - 质量阈值：单题得分<60%标准分→标记为错题
 - 输出格式（严格JSON）：{{"score":3.5,"max_score":5.0,"is_correct":false,"feedback":"反馈...","strengths":[],"gaps":[],"weakness_tags":[],"misunderstanding":"","suggested_review":"","confidence":0.85}}
 - weakness_tags可选：概念理解不清、缺少具体案例、框架不完整、分析深度不足、表述不够精准、完全错误"""
-    resp = requests.post(DEEPSEEK_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
-        json={'model': DEEPSEEK_MODEL, 'messages': [{'role': 'system', 'content': '严格但公平的评分专家。严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 1500}, timeout=60)
+    resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+        json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格但公平的评分专家。严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 1500}, timeout=60)
     if resp.status_code != 200: return {'error': f'API error {resp.status_code}'}
     content = resp.json()['choices'][0]['message']['content'].strip()
     if content.startswith('```'): content = content.split('\n', 1)[1]

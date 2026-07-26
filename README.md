@@ -77,13 +77,27 @@ chmod +x start.sh
 ### Manual start
 
 ```bash
-# .env — choose your LLM provider
-echo "LLM_API_KEY=sk-your-key" > .env
-echo "LLM_PROVIDER=deepseek" >> .env   # or: openai | zhipu | ollama
-echo "VAULT_PATH=./vault" >> .env
+# Copy config template
+cp .env.example .env
+# Edit .env — add your API key + choose vault mode
 pip install -r requirements.txt
 python server/quiz_server.py --port 5050
 ```
+
+### Vault Storage Mode · 存储模式
+
+Knowledge Lab supports two storage modes, configured via `VAULT_PATH` in `.env`:
+
+| Mode | VAULT_PATH | Description |
+|------|------|------|
+| **Standalone** (default) | `./vault` | Notes stored in project directory. No external dependencies. |
+| **Obsidian-linked** | `/path/to/Obsidian/Vault` | Notes stored in your Obsidian Vault. Both apps read/write the same files. |
+
+> **If you use Obsidian**: Set `VAULT_PATH` to your Obsidian vault root. Knowledge Lab + Obsidian share the same `Knowledge Lab/` folder. Notes created in either app appear in both.
+>
+> **If you don't use Obsidian**: Leave the default `./vault` — everything works standalone.
+
+See `.env.example` for detailed configuration examples.
 
 ### Supported LLM Providers
 
