@@ -96,6 +96,7 @@ PG_CONFIG = {
 }
 
 # Paths · now sourced from vault_core or fallback above
+SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 VAULT_BASE = VAULT_DIR
 IMPORTS_LOG = os.path.join(VAULT_BASE, '03_测验报告', '_imports.jsonl')
 os.makedirs(os.path.dirname(IMPORTS_LOG), exist_ok=True)
@@ -208,6 +209,7 @@ class QuizHandler(BaseHTTPRequestHandler):
         elif path == '/notes/verify': self._handle_verify_note(body)
         elif path == '/notes/delete': self._handle_delete_note(body)
         elif path == '/notes/transcribe': self._handle_transcribe(body)
+        elif path == '/notes/transcribe_xhs': self._handle_transcribe_xhs(body)
         else: self._send_json({'error': 'Not found', 'path': path}, 404)
 
     def do_GET(self):
@@ -736,6 +738,213 @@ quality_score: whisper_auto
             if audio_path and os.path.exists(audio_path):
                 try: os.remove(audio_path)
                 except: pass
+
+    # -- Xiaohongshu transcribe (subtitle-first, Whisper fallback) --
+    def _handle_transcribe_xhs(self, body):
+        url = body.get('url', '').strip()
+        if not url:
+            self._send_json({'error': '请提供小红书视频链接'}, 400); return
+        is_xhs = 'xiaohongshu.com' in url or 'xhslink.com' in url
+        if not is_xhs:
+            self._send_json({'error': '目前仅支持小红书(xiaohongshu.com)视频链接'}, 400); return
+
+        video_path = None; audio_path = None; title = '小红书视频'
+        try:
+            # -- Step 1: Download video via yt-dlp --
+            try:
+                import yt_dlp
+                uid = uuid.uuid4().hex[:8]
+                video_path = os.path.join(tempfile.gettempdir(), f'xhs_video_{uid}.mp4')
+
+                # Get video info first
+                with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    title = (info.get('title') or info.get('description') or '小红书视频')[:80]
+
+                # Download with subtitles if available
+                opts = {
+                    'format': 'bestvideo+bestaudio/best',
+                    'outtmpl': video_path.replace('.mp4', ''),
+                    'writesubtitles': True,
+                    'writeautomaticsub': True,
+                    'subtitleslangs': ['zh-Hans', 'zh', 'en'],
+                    'subtitlesformat': 'srt',
+                    'quiet': True,
+                }
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([url])
+
+                # Find actual downloaded file
+                base = video_path.replace('.mp4', '')
+                for ext in ['.mp4', '.mkv', '.webm', '.m4a']:
+                    if os.path.exists(base + ext):
+                        video_path = base + ext; break
+            except Exception as e:
+                self._send_json({'error': f'视频下载失败：{str(e)[:150]}'}, 500); return
+
+            if not os.path.exists(video_path):
+                self._send_json({'error': '视频文件下载后未找到'}, 500); return
+
+            # -- Step 2: Try subtitle extraction first --
+            subtitle_text = self._extract_subtitles(video_path)
+            source_type = '内嵌字幕'
+
+            if not subtitle_text or len(subtitle_text.strip()) < 20:
+                # -- Step 3: Fallback to Whisper --
+                source_type = 'Whisper转录'
+                import subprocess as sp
+                audio_path = os.path.join(tempfile.gettempdir(), f'xhs_audio_{uid}.wav')
+                sp.run(['ffmpeg', '-i', video_path, '-vn', '-acodec', 'pcm_s16le',
+                        '-ar', '16000', '-ac', '1', audio_path, '-y'],
+                       capture_output=True, timeout=120)
+
+                if not os.path.exists(audio_path):
+                    self._send_json({'error': '音频提取失败'}, 500); return
+
+                from faster_whisper import WhisperModel
+                model = WhisperModel('tiny', device='cpu', compute_type='int8')
+                segments, _ = model.transcribe(audio_path, beam_size=5, language=None)
+                subtitle_text = ' '.join([seg.text for seg in segments])
+
+                if not subtitle_text or len(subtitle_text.strip()) < 20:
+                    self._send_json({'error': '未能识别到有效语音内容，视频可能为纯画面无配音'}, 422); return
+
+            # -- Step 4: LLM generates structured note --
+            note_data = self._generate_note_from_transcript(title, subtitle_text, url, source_type)
+            if not note_data:
+                return  # error already sent
+
+            # -- Step 5: Atomic save --
+            note_filename = make_note_filename('XHS', note_data.get('title', title), note_data.get('content', ''))
+            note = f"""---
+type: study-note
+source: 小红书视频
+source_url: {url}
+topic: {note_data.get('topics', ['小红书'])[0]}
+topics: {json.dumps(note_data.get('topics', ['小红书']), ensure_ascii=False)}
+difficulty: medium
+status: draft
+created: {datetime.now().strftime('%Y-%m-%d')}
+imported: {datetime.now().isoformat()}
+quality_score: {source_type}
+---
+
+# {note_data.get('title', title)}
+
+> 来源：小红书视频 · {url}
+> 提取方式：{source_type}
+> 状态：待确认（draft）
+
+{note_data.get('content', subtitle_text[:3000])}
+"""
+            if not safe_save_note(note_filename, note):
+                self._send_json({'error': '保存笔记失败'}, 500); return
+
+            log_import('小红书视频', url, note_data.get('title', title),
+                       note_data.get('topics', []), note_filename)
+            self._send_json({
+                'status': 'success',
+                'title': note_data.get('title', title),
+                'topics': note_data.get('topics', []),
+                'file': note_filename,
+                'source_type': source_type,
+                'transcript_length': len(subtitle_text),
+            })
+        except Exception as e:
+            self._send_json({'error': f'处理失败：{str(e)[:200]}'}, 500)
+        finally:
+            for p in [video_path, audio_path]:
+                if p and os.path.exists(p):
+                    try: os.remove(p)
+                    except: pass
+
+    def _extract_subtitles(self, video_path):
+        """Extract embedded subtitles from video using ffmpeg."""
+        try:
+            srt_path = video_path + '.srt'
+            base = video_path.rsplit('.', 1)[0]
+            # Check for pre-downloaded subtitle files by yt-dlp
+            for ext in ['.zh-Hans.srt', '.zh.srt', '.en.srt', '.srt']:
+                candidate = base + ext
+                if os.path.exists(candidate):
+                    with open(candidate, 'r', encoding='utf-8') as f:
+                        raw = f.read()
+                    return self._clean_srt(raw)
+
+            # Try extracting embedded subtitle streams via ffmpeg
+            import subprocess as sp
+            # First check which subtitle streams exist
+            probe = sp.run(['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                           '-show_streams', video_path], capture_output=True, text=True, timeout=30)
+            streams = json.loads(probe.stdout).get('streams', [])
+            sub_streams = [s for s in streams if s.get('codec_type') == 'subtitle']
+            if sub_streams:
+                idx = sub_streams[0]['index']
+                sp.run(['ffmpeg', '-i', video_path, '-map', f'0:{idx}',
+                        srt_path, '-y'], capture_output=True, timeout=60)
+                if os.path.exists(srt_path):
+                    with open(srt_path, 'r', encoding='utf-8') as f:
+                        raw = f.read()
+                    text = self._clean_srt(raw)
+                    try: os.remove(srt_path)
+                    except: pass
+                    return text
+            return ''
+        except:
+            return ''
+
+    def _clean_srt(self, raw_srt):
+        """Strip SRT timestamps and index numbers, return plain text."""
+        lines = []
+        for line in raw_srt.split('\n'):
+            line = line.strip()
+            if not line or line.isdigit(): continue
+            if '-->' in line: continue
+            lines.append(line)
+        return ' '.join(lines)
+
+    def _generate_note_from_transcript(self, title, transcript, url, source_type):
+        """Send transcript to LLM, return {'title','topics','content','summary'}."""
+        existing_topics = set()
+        if os.path.exists(NOTES_DIR):
+            for fname in os.listdir(NOTES_DIR):
+                if fname.endswith('.md') and not fname.startswith('模板'):
+                    try:
+                        with open(os.path.join(NOTES_DIR, fname), 'r', encoding='utf-8') as fh:
+                            for line in fh:
+                                if line.startswith('topic:') or line.startswith('topics:'):
+                                    for t in line.split(':', 1)[1].strip().strip('"[]').split(','):
+                                        if t.strip(): existing_topics.add(t.strip())
+                                    break
+                    except: pass
+
+        prompt = f"""你是知识管理助手。请阅读以下{source_type}内容，整理为一篇结构化学习笔记。
+
+## 视频标题
+{title}
+
+## {source_type}内容
+{transcript[:6000]}
+
+## 现有主题
+{', '.join(sorted(existing_topics)) if existing_topics else 'AI技术理解, 产品设计能力, 商业化思维, 工程协作能力, 评测体系搭建, 数据驱动决策'}
+
+输出格式（严格JSON）：{{"title":"标题","topics":["分类1"],"content":"笔记(保留关键信息、金句、数据)","summary":"一句话摘要"}}"""
+        try:
+            resp = requests.post(DEEPSEEK_API_URL,
+                headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+                json={'model': LLM_MODEL,
+                      'messages': [{'role': 'system', 'content': '严格按JSON格式输出。'},
+                                   {'role': 'user', 'content': prompt}],
+                      'temperature': 0.3, 'max_tokens': 4000}, timeout=120)
+            if resp.status_code != 200:
+                self._send_json({'error': f'LLM API error: {resp.status_code}'}, 500); return None
+            content = resp.json()['choices'][0]['message']['content'].strip()
+            if content.startswith('```'): content = content.split('\n', 1)[1]
+            if content.endswith('```'): content = content[:-3]
+            return json.loads(content)
+        except Exception as e:
+            self._send_json({'error': f'LLM处理失败：{str(e)[:150]}'}, 500); return None
 
     # -- Competency --
     COMPETENCY_DIMS = {

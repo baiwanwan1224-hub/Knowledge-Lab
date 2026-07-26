@@ -276,6 +276,7 @@ tr:hover{background:var(--bg)}
       <button class="btn btn-primary" onclick="importURL()" id="importBtn">🔗 导入链接</button>
       <input type="file" id="importFile" accept=".md,.txt,.pdf" multiple style="position:absolute;opacity:0;width:0;height:0;overflow:hidden" onchange="importFile()">
       <label for="importFile" class="btn btn-outline btn-sm" style="cursor:pointer" title="支持 .md / .txt / .pdf">📁 本地文件</label>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer;background:#ff24421a;border-color:#ff244233;color:#ff2442;font-size:11px" onclick="document.getElementById('xhsModal').style.display='flex'" title="小红书视频 → 自动识别字幕/语音 → 生成笔记">📕 小红书视频</label>
     </div>
     <div class="url-import-result" id="importResult"></div>
   </div>
@@ -291,7 +292,7 @@ tr:hover{background:var(--bg)}
       <option value="">全部状态 / All</option><option value="draft">待确认</option><option value="ready">已确认</option>
     </select>
     <select id="kbFilterSource" onchange="renderNotes()" style="max-width:100px">
-      <option value="">全部来源</option><option value="URL">链接导入</option><option value="GH">GitHub</option><option value="手动">手动</option><option value="本地">本地文件</option><option value="课程">课程</option>
+      <option value="">全部来源</option><option value="URL">链接导入</option><option value="小红书">小红书</option><option value="GH">GitHub</option><option value="手动">手动</option><option value="本地">本地文件</option><option value="课程">课程</option>
     </select>
   </div>
   <div class="note-grid" id="noteGrid"><div class="loading"><div class="spinner"></div></div></div>
@@ -1464,8 +1465,67 @@ async function deleteNote(filename) {
   }
 }
 
+// ===== XIAOHONGSHU TRANSCRIPTION =====
+async function transcribeXHS() {
+  const url = document.getElementById('xhsUrl').value.trim();
+  if (!url) { showToast('请粘贴小红书视频链接', 'error'); return; }
+
+  const modal = document.getElementById('xhsModal');
+  const resultDiv = document.getElementById('xhsResult');
+  const btn = document.getElementById('xhsBtn');
+
+  btn.disabled = true; btn.textContent = '处理中...';
+  resultDiv.className = 'url-import-result show';
+  resultDiv.innerHTML = '📕 正在下载视频 + 识别字幕/语音转文字...（约1-3分钟）';
+
+  try {
+    const resp = await fetch(API + '/notes/transcribe_xhs', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    const data = await resp.json();
+
+    if (data.status === 'success') {
+      resultDiv.innerHTML = `✅ <b>${data.title}</b> 已导入<br>
+        <span style="font-size:11px">提取方式：${data.source_type} · 字数：${data.transcript_length}</span><br>
+        <span style="font-size:11px;color:var(--accent)">状态：draft · 请验证内容准确性</span><br>
+        <span style="font-size:11px"><a href="javascript:openNote('${(data.file||'').replace(/'/g,'&#39;')}')">📄 查看笔记</a></span>`;
+      showToast('小红书视频导入成功', 'success');
+      await loadNotes(); renderNotes();
+      setTimeout(() => { modal.style.display = 'none'; }, 3000);
+    } else {
+      resultDiv.className = 'url-import-result error show';
+      resultDiv.innerHTML = `❌ ${data.error}`;
+      showToast('导入失败', 'error');
+    }
+  } catch(e) {
+    resultDiv.className = 'url-import-result error show';
+    resultDiv.innerHTML = `❌ 处理失败：${e.message}`;
+    showToast('导入失败', 'error');
+  }
+  btn.disabled = false; btn.textContent = '📕 开始导入';
+}
+
 // ===== LAUNCH =====
 init();
 </script>
+
+<!-- Xiaohongshu Import Modal -->
+<div id="xhsModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--card-bg);border-radius:12px;padding:32px;max-width:520px;width:90%;border:1px solid var(--border)">
+    <h3 style="margin:0 0 8px">📕 小红书视频导入</h3>
+    <p style="color:var(--text-muted);font-size:13px;margin:0 0 20px">
+      支持 xiaohongshu.com / xhslink.com 视频链接<br>
+      自动识别：<b>字幕优先</b> → 有内嵌字幕直接提取 → 无字幕则 <b>Whisper 语音转文字</b> → DeepSeek 整理成笔记<br>
+      <span style="color:var(--accent)">无需登录 · 约1-3分钟</span>
+    </p>
+    <input type="url" id="xhsUrl" placeholder="https://www.xiaohongshu.com/..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:16px;background:var(--bg);color:var(--text)">
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" onclick="transcribeXHS()" id="xhsBtn">📕 开始导入</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('xhsModal').style.display='none'">取消</button>
+    </div>
+    <div id="xhsResult" class="url-import-result" style="margin-top:16px"></div>
+  </div>
+</div>
 </body>
 </html>
