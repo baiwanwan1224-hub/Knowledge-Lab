@@ -827,10 +827,19 @@ quality_score: whisper_auto
 
 def main():
     port = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == '--port' else 5050
-    server = HTTPServer(('0.0.0.0', port), QuizHandler)
+
+    # ── Startup integrity check ──
+    note_count = len([f for f in os.listdir(NOTES_DIR) if f.endswith('.md') and not f.startswith('模板_')]) if os.path.exists(NOTES_DIR) else 0
     print(f'Knowledge Lab API v4 · http://localhost:{port}')
+    print(f'Vault: {VAULT_BASE} ({note_count} notes)')
     print(f'PG: {"connected" if HAS_PG else "file-only mode"}')
     print(f'Standards: {len(STANDARDS)} loaded')
+
+    # ── Warn if vault is empty ──
+    if note_count == 0:
+        print('⚠️  Vault is empty. Import content via http://localhost:{}/ or restore from backup.')
+
+    server = HTTPServer(('0.0.0.0', port), QuizHandler)
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nShutting down...'); server.shutdown()
 

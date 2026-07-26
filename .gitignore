@@ -23,11 +23,35 @@ Thumbs.db
 
 # Runtime
 /tmp/
+logs/
 *.log
 
-# User data (don't commit personal notes)
+# ═══════════════════════════════════════════
+# Vault — 数据防丢策略
+# ═══════════════════════════════════════════
+#
+# 规则：元数据和索引入 git（可追溯）
+#       用户笔记不入 git（隐私 + 体积）
+#       备份不入 git（本地循环）
+
+# 用户笔记 — 不入 git
 vault/00_学习笔记/*.md
-vault/01_错题本/*.md
-vault/03_测验报告/*.md
+vault/01_原始资料/
+vault/02_结构化输出/
+vault/03_附件/
+
+# 备份 — 不入 git
+vault/_backup/
+
+# 锁文件 — 不入 git
+vault/.vault-meta/.lock
+vault/.vault-meta/wal.log
+
+# 保留模板文件（入 git）
 !vault/00_学习笔记/模板_*.md
-!vault/01_错题本/模板_*.md
+
+# ═══════════════════════════════════════════
+# .vault-meta 元数据 — 入 git（用于恢复）
+# vault/04_索引 — 入 git
+# 以上目录不在此 .gitignore 中，默认会跟踪
+# ═══════════════════════════════════════════
