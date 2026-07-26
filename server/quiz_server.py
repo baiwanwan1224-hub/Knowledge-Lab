@@ -9,6 +9,40 @@ from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+# Vault core — atomic writes + WAL + integrity
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from vault_core import (safe_save_note, make_note_filename,
+                            wal_replay, save_integrity_snapshot,
+                            verify_integrity, VAULT_DIR, NOTES_DIR,
+                            WRONG_DIR, STANDARDS_DIR)
+except ImportError as e:
+    print(f'[WARN] vault_core not available ({e}), using fallback')
+    # Fallback: set up paths directly if vault_core not available
+    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    _ROOT_DIR = os.path.dirname(_SCRIPT_DIR)
+    VAULT_DIR = os.path.join(_ROOT_DIR, 'vault')
+    NOTES_DIR = os.path.join(VAULT_DIR, '00_学习笔记')
+    WRONG_DIR = os.path.join(VAULT_DIR, '01_错题本')
+    STANDARDS_DIR = os.path.join(VAULT_DIR, '06_产品层')
+    for _d in [NOTES_DIR, WRONG_DIR, STANDARDS_DIR]:
+        os.makedirs(_d, exist_ok=True)
+
+    def safe_save_note(fn, c):  # minimal fallback
+        with open(os.path.join(NOTES_DIR, fn), 'w', encoding='utf-8') as f:
+            f.write(c)
+        return True
+
+    def make_note_filename(t, title, content):  # minimal fallback
+        from datetime import datetime as _dt
+        ts = _dt.now().strftime('%Y%m%d_%H%M%S')
+        s = re.sub(r'[^a-z0-9]+', '-', title.lower().strip())[:50].strip('-')
+        return f'{ts}_{t}_{s}.md'
+
+    def wal_replay(): return []
+    def save_integrity_snapshot(): return {'note_count': 0, 'timestamp': 'N/A', 'files': {}}
+    def verify_integrity(): return {'status': 'no_module', 'missing': [], 'changed': [], 'new': [], 'snapshot_used': None}
+
 # Load .env file if present (for zero-config startup)
 ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 if os.path.exists(ENV_FILE):
@@ -61,17 +95,10 @@ PG_CONFIG = {
     'password': os.environ.get('PG_PASSWORD', ''),
 }
 
-# Paths
-SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
-VAULT_BASE = os.environ.get('VAULT_PATH', os.path.join(os.path.dirname(SCRIPTS_DIR), 'vault'))
-NOTES_DIR = os.path.join(VAULT_BASE, '00_学习笔记')
-WRONG_DIR = os.path.join(VAULT_BASE, '01_错题本')
-STANDARDS_DIR = os.path.join(VAULT_BASE, '06_产品层')
+# Paths · now sourced from vault_core or fallback above
+VAULT_BASE = VAULT_DIR
 IMPORTS_LOG = os.path.join(VAULT_BASE, '03_测验报告', '_imports.jsonl')
-
-# Auto-create vault directories (survives .env loss)
-for _d in [NOTES_DIR, WRONG_DIR, STANDARDS_DIR, os.path.dirname(IMPORTS_LOG)]:
-    os.makedirs(_d, exist_ok=True)
+os.makedirs(os.path.dirname(IMPORTS_LOG), exist_ok=True)
 
 def log_import(import_type, source, title, topics, note_file):
     os.makedirs(os.path.dirname(IMPORTS_LOG), exist_ok=True)
@@ -493,8 +520,9 @@ quality_score: unverified
 
 {data.get('content', '')}
 """
-        filename = f'{date_str}_{safe_title}_URL.md'; filepath = os.path.join(NOTES_DIR, filename)
-        with open(filepath, 'w', encoding='utf-8') as f: f.write(note)
+        filename = make_note_filename('URL', data.get('title', 'Imported'), note)
+        if not safe_save_note(filename, note):
+            self._send_json({'error': 'Failed to save note'}, 500); return
         log_import('URL', url, data.get('title', ''), topics, filename)
         self._send_json({'status': 'success', 'title': data.get('title', ''), 'topics': topics, 'file': filename, 'summary': data.get('summary', '')})
 
@@ -605,8 +633,8 @@ quality_score: unverified
 
 {data.get('content', text[:3000])}
 """
-            note_filename = f'{date_str}_{safe_title}_本地.md'; filepath = os.path.join(NOTES_DIR, note_filename)
-            with open(filepath, 'w', encoding='utf-8') as f: f.write(note)
+            note_filename = make_note_filename('LOCAL', data.get('title', fn), note)
+            if not safe_save_note(note_filename, note): continue
             log_import('本地文件', f'文件: {filename}', data.get('title', ''), topics, note_filename)
             results.append({'file': filename, 'status': 'success', 'title': data.get('title', ''), 'topics': topics, 'note_file': note_filename})
 
@@ -697,8 +725,9 @@ quality_score: whisper_auto
 
 {data.get('content', transcript[:3000])}
 """
-            note_filename = f'{date_str}_{safe_title}_Whisper.md'; filepath = os.path.join(NOTES_DIR, note_filename)
-            with open(filepath, 'w', encoding='utf-8') as f: f.write(note)
+            note_filename = make_note_filename('WHISPER', data.get('title', 'Transcribed'), note)
+            if not safe_save_note(note_filename, note):
+                self._send_json({'error': 'Failed to save note'}, 500); return
             log_import('Whisper转录', f'视频: {title}', data.get('title', title), topics, note_filename)
             self._send_json({'status': 'success', 'title': data.get('title', title), 'topics': topics, 'file': note_filename, 'transcript_length': len(transcript), 'source': f'Whisper转录: {title}'})
         except Exception as e:
@@ -828,16 +857,28 @@ quality_score: whisper_auto
 def main():
     port = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == '--port' else 5050
 
-    # ── Startup integrity check ──
-    note_count = len([f for f in os.listdir(NOTES_DIR) if f.endswith('.md') and not f.startswith('模板_')]) if os.path.exists(NOTES_DIR) else 0
+    # -- Startup: WAL replay + integrity check --
+    print('vault-core: checking integrity...')
+    orphaned = wal_replay()
+    if orphaned:
+        print(f'  Recovered {len(orphaned)} incomplete writes: {orphaned}')
+
+    integrity = verify_integrity()
+    note_count = len(integrity.get('new', [])) if integrity['status'] == 'no_snapshot' else \
+        len([f for f in os.listdir(NOTES_DIR) if f.endswith('.md') and not f.startswith('模板_')]) if os.path.exists(NOTES_DIR) else 0
+
     print(f'Knowledge Lab API v4 · http://localhost:{port}')
-    print(f'Vault: {VAULT_BASE} ({note_count} notes)')
+    print(f'Vault: {VAULT_BASE} ({note_count} notes) : Integrity {integrity.get("status", "?")}')
+    if integrity.get('missing'):
+        print(f'  WARNING - Missing files: {integrity["missing"]}')
+    if integrity.get('changed'):
+        print(f'  WARNING - Changed files: {integrity["changed"]}')
     print(f'PG: {"connected" if HAS_PG else "file-only mode"}')
     print(f'Standards: {len(STANDARDS)} loaded')
 
-    # ── Warn if vault is empty ──
-    if note_count == 0:
-        print('⚠️  Vault is empty. Import content via http://localhost:{}/ or restore from backup.')
+    # ── Save fresh snapshot ──
+    snap = save_integrity_snapshot()
+    print(f'Snapshot: {snap.get("note_count", 0)} notes - {snap.get("timestamp", "N/A")}')
 
     server = HTTPServer(('0.0.0.0', port), QuizHandler)
     try: server.serve_forever()
