@@ -43,7 +43,7 @@
 
 | 逐题回顾（下） |
 |:---:|
-| ![](docs/images/批发后-逐题回顾1.png) |
+| ![](docs/images/批改后-逐题回顾1.png) |
 | ![](docs/images/批发后-逐题回顾2.png) |
 
 ### Wrong Answers · 错题本
@@ -188,5 +188,7 @@ AGPL v3.0 — 详见 [LICENSE](LICENSE)
 Commercial use requires a separate license. Contact: baiwanwan1224@gmail.com
 
 ---
+
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/baiwanwan1224-hub/Knowledge-Lab/releases)
 
 Built with [Claude Code](https://claude.ai/code) · 2026
