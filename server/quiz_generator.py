@@ -49,8 +49,8 @@ def find_notes(topic=None):
 
 def build_prompt(topic, count, types, difficulty, notes):
     context = ''
-    for i, note in enumerate(notes[:5]):
-        content = note['content'][:1500]
+    for i, note in enumerate(notes[:10]):
+        content = note['content'][:3000]
         context += f'\n### Source {i+1}: {note["title"]}\n{content}\n'
     type_desc = {'single_choice': '单选题(4选项A/B/C/D)', 'short_answer': '简答题(2-4句)', 'scenario': '场景题(AI PM实际场景)'}
     type_str = '\n'.join([f'- {type_desc.get(t, t)}' for t in types])
@@ -82,7 +82,7 @@ def build_prompt(topic, count, types, difficulty, notes):
 
 def call_llm(prompt):
     resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
-        json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '你是AI产品经理教学专家，严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.7, 'max_tokens': 4000}, timeout=120)
+        json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '你是AI产品经理教学专家，严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.7, 'max_tokens': 6000}, timeout=120)
     if resp.status_code != 200: return {'error': f'API error {resp.status_code}: {resp.text}'}
     return resp.json()
 
