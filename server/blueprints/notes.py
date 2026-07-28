@@ -123,7 +123,7 @@ def _ai_structure(raw_text, filename):
         return raw_text
     try:
         # DeepSeek can handle ~16K chars comfortably. For longer docs, split.
-        MAX_CHUNK = 30000
+        MAX_CHUNK = 50000
         if len(raw_text) <= MAX_CHUNK:
             chunks = [raw_text]
         else:
@@ -201,21 +201,11 @@ def _do_import_url(url, topic=""):
     try:
         resp = requests.get(url, timeout=30, headers={'User-Agent': 'Knowledge-Lab/1.0'})
         resp.raise_for_status()
-        raw = resp.text[:20000]
+        raw = resp.text
     except Exception as e:
         return error_response(ErrorCode.NOT_FOUND, f"Cannot fetch URL: {e}")
 
-    # Call LLM to structure content
-    prompt = f"""请将以下网页内容结构化为Markdown学习笔记。提取核心概念、关键框架、实践案例。原文：\n\n{raw[:10000]}"""
-    try:
-        llm_resp = requests.post(LLM_API_URL,
-            headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': LLM_MODEL, 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.5, 'max_tokens': 3000},
-            timeout=120)
-        structured = llm_resp.json()['choices'][0]['message']['content']
-    except Exception as e:
-        return error_response(ErrorCode.LLM_API_ERROR, str(e), 502)
-
+    structured = _ai_structure(raw, url.split('/')[-1][:40] or 'url_import')
     fname, title, topics_list = _save_note(structured, topic, url)
     log_import('url', url, title, topics_list, fname)
     return jsonify({'status': 'success', 'file': fname, 'title': title, 'topics': topics_list})
@@ -228,16 +218,7 @@ def paste_note():
     return _do_import_url("", body.topic) if not body.content else _handle_paste(body.content, body.topic)
 
 def _handle_paste(content, topic=""):
-    prompt = f"""请将以下文本结构化为Markdown学习笔记。提取核心概念、关键框架、实践案例。原文：\n\n{content[:10000]}"""
-    try:
-        llm_resp = requests.post(LLM_API_URL,
-            headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': LLM_MODEL, 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.5, 'max_tokens': 3000},
-            timeout=120)
-        structured = llm_resp.json()['choices'][0]['message']['content']
-    except Exception as e:
-        return error_response(ErrorCode.LLM_API_ERROR, str(e), 502)
-
+    structured = _ai_structure(content, 'paste')
     fname, title, topics_list = _save_note(structured, topic, "paste")
     log_import('paste', 'paste', title, topics_list, fname)
     return jsonify({'status': 'success', 'file': fname, 'title': title, 'topics': topics_list})
@@ -351,7 +332,7 @@ def upload_file():
         except OSError: pass
 
     # Split long PDFs into multiple notes (30000 chars each)
-    SPLIT_AT = 30000
+    SPLIT_AT = 50000
     if len(raw_text) > SPLIT_AT:
         paras = raw_text.split('\n\n')
         parts = []; current = ''
