@@ -197,13 +197,30 @@ def import_note():
     return _do_import_url(body.url, body.topic)
 
 def _do_import_url(url, topic=""):
-    # Fetch URL content
+    # Fetch URL content — try HTTP first, fallback to Playwright for JS-rendered pages
+    raw = ''
     try:
         resp = requests.get(url, timeout=30, headers={'User-Agent': 'Knowledge-Lab/1.0'})
         resp.raise_for_status()
         raw = resp.text
     except Exception as e:
         return error_response(ErrorCode.NOT_FOUND, f"Cannot fetch URL: {e}")
+
+    # Detect thin/JS-rendered pages: little actual text content
+    text_content = re.sub(r'<[^>]+>', ' ', raw).strip()
+    if len(text_content) < 500:
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto(url, timeout=30000, wait_until='networkidle')
+                raw = page.content()
+                browser.close()
+        except ImportError:
+            pass  # Playwright not installed, use whatever HTTP got
+        except Exception:
+            pass  # Playwright render failed, use HTTP result
 
     structured = _ai_structure(raw, url.split('/')[-1][:40] or 'url_import')
     fname, title, topics_list = _save_note(structured, topic, url)

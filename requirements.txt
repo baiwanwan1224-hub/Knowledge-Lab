@@ -7,3 +7,4 @@ youtube-transcript-api>=1.0
 faster-whisper>=1.0
 yt-dlp>=2024.1
 PyPDF2>=3.0
+playwright>=1.40  # 可选：JS渲染页面导入（知乎/微信公众号等），安装后需 python -m playwright install chromium
