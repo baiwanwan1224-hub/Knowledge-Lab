@@ -145,11 +145,12 @@ knowledge-lab/
 │   ├── middleware/     ← API Key 认证
 │   ├── cache.py        ← LLM 响应缓存
 │   └── stats.py        ← 调用统计
+├── skills/             ← AI 协作技能（7 个）
+├── tests/              ← 32 个 pytest 用例
 ├── standards/          ← L0 不可变标准
-├── spec/               ← 产品文档 + 过程记录
+├── spec/               ← 产品文档 + 方案文档
 ├── docs/               ← 技术文档 + 截图
-├── scripts/            ← 启动 + 备份脚本
-├── tmp/                ← 参考项目（MNN/openclaw/Dify/Anki...）
+├── templates/          ← Obsidian 笔记模板
 └── vault/              ← 本地知识库
 ```
 
