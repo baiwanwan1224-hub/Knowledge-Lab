@@ -56,7 +56,7 @@ def create_app():
     # ── 301 redirect: old paths → /v1 ──
     @app.route('/<path:path>', methods=['GET'])
     def legacy_redirect(path):
-        if path in ('health', 'apidocs', 'flasgger') or path.startswith('apidocs') or path.startswith('flasgger'):
+        if path.startswith('v1/') or path in ('health', 'apidocs', 'flasgger', 'favicon.ico') or path.startswith('apidocs') or path.startswith('flasgger'):
             if path == 'health':
                 from flask import jsonify
                 from datetime import datetime

@@ -434,7 +434,7 @@ function handleError(err, context) {
 // Fetch wrapper with 30s timeout
 async function apiFetch(url, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const timeout = setTimeout(() => controller.abort(), 120000);
   try {
     const resp = await fetch(url, { ...options, signal: controller.signal });
     return resp;
