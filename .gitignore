@@ -26,6 +26,9 @@ Thumbs.db
 /tmp/
 logs/
 *.log
+data/*.db
+data/sessions/
+current_session.json
 
 # ═══════════════════════════════════════════
 # Vault — 数据防丢策略
