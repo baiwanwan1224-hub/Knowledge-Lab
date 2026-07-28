@@ -580,6 +580,7 @@ async function loadCompetency() {
     const data = await fetch(API + '/competency').then(r => r.json());
     const comp = data.competency || {};
     const dims = Object.keys(comp);
+    window._assessmentStatus = data.assessment_status || 'not_taken';
 
     document.getElementById('dashCompetency').style.display = '';
     renderRadar(comp, dims);
@@ -668,14 +669,17 @@ function renderRadar(comp, dims) {
 }
 
 function renderCompetencyBars(comp, dims) {
+  const status = window._assessmentStatus || 'not_taken';
   document.getElementById('competencyBars').innerHTML = dims.map(d => {
-    const s = comp[d] || 50;
-    const color = s >= 70 ? 'var(--green)' : s >= 40 ? 'var(--accent)' : 'var(--red)';
+    const s = comp[d] || 0;
+    const isAssessed = status === 'assessed' && s > 0;
+    const color = !isAssessed ? 'var(--text-dim)' : s >= 70 ? 'var(--green)' : s >= 40 ? 'var(--accent)' : 'var(--red)';
+    const label = isAssessed ? `${s}%` : '未评估';
     return `<div class="competency-bar comp-bar-row" data-dim="${d}"
       onmouseover="highlightDim('${d}')" onmouseout="unhighlightDim()"
       style="cursor:pointer;padding:4px 8px;border-radius:2px;transition:background 0.15s">
-      <div class="bar-label"><span>${d}</span><span style="font-family:var(--font-label);font-size:10px;color:${color}">${s}%</span></div>
-      <div class="bar-track"><div class="bar-fill bar-fill-${d.replace(/[^a-zA-Z]/g,'')}" style="width:${s}%;background:${color};transition:width 0.3s,background 0.2s"></div></div>
+      <div class="bar-label"><span>${d}</span><span style="font-family:var(--font-label);font-size:10px;color:${color}">${label}</span></div>
+      <div class="bar-track"><div class="bar-fill bar-fill-${d.replace(/[^a-zA-Z]/g,'')}" style="width:${isAssessed ? s : 0}%;background:${color};transition:width 0.3s,background 0.2s"></div></div>
     </div>`;
   }).join('');
 }

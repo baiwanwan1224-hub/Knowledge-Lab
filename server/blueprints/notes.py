@@ -576,9 +576,29 @@ def list_imports():
 
 @notes_bp.route('/competency')
 def competency():
-    topic = request.args.get('topic', '')
-    # Load competency dimensions from standards
-    dims = ['AI技术理解', '评测体系搭建', '数据驱动决策', '产品设计能力', '商业化思维', '工程协作能力']
+    # L0-002 v1.0 · Keyword mapping for 6 dimensions
+    DIM_KEYWORDS = {
+        'AI技术理解': ['AI技术', 'LLM', 'GPT', 'Claude', 'embedding', 'RAG', 'token', 'context',
+                    'prompt', 'agent', 'orchestration', 'model', '模型', '大模型', '生成式',
+                    'deepseek', 'gemini', '温度', '上下文窗口', 'fine-tuning', '微调'],
+        '评测体系搭建': ['评测', '评估', 'evaluation', 'benchmark', 'golden', 'metric',
+                      'accuracy', 'quality', 'rubric', '质量', '打分', '评分标准',
+                      'LLM-as-Judge', 'bad case', '幻觉', 'hallucination'],
+        '数据驱动决策': ['数据', 'data', 'analytics', 'A/B', 'ab test', 'metric', 'NSM',
+                      'north star', 'SaaS', '指标', '留存', '转化', '漏斗', '实验',
+                      '统计', 'cohort', 'cohort analysis'],
+        '产品设计能力': ['用户故事', 'user story', 'PRD', 'JTBD', '优先级', 'priorit',
+                      '路线图', 'roadmap', 'discovery', '产品设计', 'positioning',
+                      '定位', 'problem framing', '竞品分析', 'persona', '用户画像',
+                      'MVP', '原型', 'prototype'],
+        '商业化思维': ['商业化', 'TAM', 'SAM', 'SOM', 'revenue', '收入', '定价',
+                    'pricing', '市场', 'competitive', '竞争', '战略', 'business',
+                    'ROI', 'LTV', 'CAC', 'MRR', 'ARR', 'freemium', '订阅'],
+        '工程协作能力': ['工程', 'stakeholder', '协作', 'epic', 'story mapping',
+                      '开发', '技术方案', 'OKR', 'KPI', 'sprint', 'agile',
+                      'scrum', '交付', '技术评审', 'architecture'],
+    }
+
     wrong_cards = []
     if os.path.exists(WRONG_DIR):
         for root, dirs, files in os.walk(WRONG_DIR):
@@ -587,27 +607,69 @@ def competency():
                     with open(os.path.join(root, fname), 'r', encoding='utf-8') as f:
                         wrong_cards.append(f.read())
 
+    # Count quiz answers per dimension from wrong cards + session data
+    dim_stats = {d: {'wrong': 0, 'total': 0} for d in DIM_KEYWORDS}
+
+    for card in wrong_cards:
+        matched = None
+        for dim, keywords in DIM_KEYWORDS.items():
+            if any(kw.lower() in card.lower() for kw in keywords):
+                matched = dim
+                break
+        if matched:
+            dim_stats[matched]['wrong'] += 1
+            dim_stats[matched]['total'] += 1
+
+    # Also scan session history for completed quizzes
+    sessions_dir = os.path.join(os.path.dirname(SCRIPTS_DIR), 'data', 'sessions')
+    if os.path.exists(sessions_dir):
+        for fname in os.listdir(sessions_dir):
+            if fname.endswith('.json'):
+                try:
+                    with open(os.path.join(sessions_dir, fname), 'r', encoding='utf-8') as f:
+                        s = json.load(f)
+                    if s.get('status') == 'completed':
+                        # Approximate: each completed quiz contributes to dimension totals
+                        topics = s.get('topics', [])
+                        if isinstance(topics, str):
+                            try: topics = json.loads(topics)
+                            except: topics = [topics]
+                        for topic in (topics if isinstance(topics, list) else [topics]):
+                            topic_str = str(topic)
+                            for dim, keywords in DIM_KEYWORDS.items():
+                                if any(kw.lower() in topic_str.lower() for kw in keywords):
+                                    dim_stats[dim]['total'] += s.get('total_questions', 0)
+                                    dim_stats[dim]['wrong'] += s.get('total_questions', 0) - s.get('questions_correct', 0)
+                except: pass
+
     result = {}
-    for dim in dims:
-        score = 50
-        # Check wrong cards for this dimension
-        matching = [c for c in wrong_cards if dim in c]
-        if matching:
-            total_mentions = len(matching)
-            mastered_mentions = len([c for c in matching if 'ease_factor: 2.5' in c or 'review_count: 0' not in c])
-            score = max(10, min(95, int((1 - total_mentions / (total_mentions + 10)) * 100)))
+    for dim in DIM_KEYWORDS:
+        stat = dim_stats[dim]
+        if stat['total'] > 0:
+            correct = stat['total'] - stat['wrong']
+            score = max(0, min(100, round(correct / stat['total'] * 100)))
+        else:
+            score = 0  # Not assessed yet
         result[dim] = score
 
-    # Sort by score: weakest first
+    # Only show recommendation if there's actual data
+    has_data = any(s > 0 for s in result.values())
     sorted_dims = sorted(result.items(), key=lambda x: x[1])
     weakest = [{'dim': d, 'score': s} for d, s in sorted_dims[:2]]
-    rec = f"今日建议重点突破「{weakest[0]['dim']}」（当前 {weakest[0]['score']} 分）。从知识库选择该主题做一次测验，然后复习错题本中的相关卡片。"
+    if has_data and weakest[0]['score'] > 0:
+        rec = f"今日建议重点突破「{weakest[0]['dim']}」（当前 {weakest[0]['score']} 分）。从知识库选择该主题做一次测验，然后复习错题本中的相关卡片。"
+    elif has_data:
+        rec = "继续保持！所有维度表现均衡。尝试不同主题的测验来扩展知识面。"
+    else:
+        rec = "还没有评估数据。去「出题测验」完成第一次测试，系统会根据答题结果自动计算你的能力雷达图。"
 
     return jsonify({
         'competency': result,
         'weakest': weakest,
         'recommendation': rec,
+        'assessment_status': 'assessed' if has_data else 'not_taken',
         'standard_version': '1.0',
+        'l0_002_version': '1.0',
         'assessed_at': datetime.now().isoformat()
     })
 
