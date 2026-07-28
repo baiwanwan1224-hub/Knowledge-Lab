@@ -1,0 +1,16 @@
+{
+  "session_uuid": "453a0ce8-8df7-4a99-9b18-dca203a04164",
+  "session_name": "AI产品经理测验 2026-07-28 11:53",
+  "created_at": "2026-07-28T11:53:21.946914",
+  "completed_at": "2026-07-28T12:07:06.118677",
+  "total_questions": 5,
+  "questions_correct": 3,
+  "total_score": 3.0,
+  "total_max": 13.0,
+  "score_percentage": 23.1,
+  "difficulty": "easy",
+  "topics": [
+    "AI产品经理"
+  ],
+  "status": "completed"
+}

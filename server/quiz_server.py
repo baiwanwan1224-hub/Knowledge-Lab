@@ -241,7 +241,7 @@ class QuizHandler(BaseHTTPRequestHandler):
         else: self._send_json({'error': 'Not found'}, 404)
 
     def _serve_dashboard(self):
-        html_path = os.path.join(os.path.dirname(SCRIPTS_DIR), 'dashboard', 'dashboard_v2.html')
+        html_path = os.path.join(os.path.dirname(SCRIPTS_DIR), 'apps', 'web', 'dashboard_v2.html')
         try:
             with open(html_path, 'r', encoding='utf-8') as f: html = f.read()
             self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.end_headers()

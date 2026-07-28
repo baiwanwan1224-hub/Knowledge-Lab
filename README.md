@@ -1,180 +1,191 @@
 # Knowledge Lab · 自测学习平台
 
-> RAG-powered self-test learning platform with Obsidian + LLM + Whisper  
+> RAG-powered self-test learning platform with Obsidian + LLM + Whisper
 > 基于 Obsidian + LLM + Whisper 的 RAG 自测学习系统
 
+[![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-AGPL%20v3-blue)](LICENSE)
+[![Flask](https://img.shields.io/badge/Flask-3.0+-black)](https://flask.palletsprojects.com/)
+[![CI](https://github.com/baiwanwan1224-hub/Knowledge-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/baiwanwan1224-hub/Knowledge-Lab/actions)
+[![Status](https://img.shields.io/badge/status-active-brightgreen)]()
 
 ---
 
 ## Screenshots · 界面预览
 
-| Dashboard · 仪表盘 | Knowledge Base · 知识库 |
-|:---:|:---:|
-| ![Dashboard](docs/images/01-dashboard-bilingual.png) | ![Knowledge](docs/images/02-knowledge-bilingual.png) |
+### Dashboard · 仪表盘
 
-| Quiz · 出题测验 | Wrong Answers · 错题本 |
+| 全景 | 下半部分 |
 |:---:|:---:|
-| ![Quiz](docs/images/03-quiz-bilingual.png) | ![Wrong](docs/images/04-wrong-bilingual.png) |
+| ![](docs/images/仪表盘1.png) | ![](docs/images/仪表盘2.png) |
+
+### Knowledge Base · 知识库
+
+| 笔记列表 | 粘贴文本导入 |
+|:---:|:---:|
+| ![](docs/images/知识库1.png) | ![](docs/images/知识库1-粘贴文本.png) |
+
+| 笔记详情展示 |
+|:---:|
+| ![](docs/images/知识库-笔记展示.png) |
+
+### Quiz · 出题测验
+
+| 选题界面 | 答题界面 |
+|:---:|:---:|
+| ![](docs/images/出题测验1.png) | ![](docs/images/出题测验2.png) |
+
+### Grading · 批改结果
+
+| 得分总览 | 逐题回顾（上） |
+|:---:|:---:|
+| ![](docs/images/批改后.png) | ![](docs/images/批改后1.png) |
+
+| 逐题回顾（下） |
+|:---:|
+| ![](docs/images/批发后-逐题回顾1.png) |
+| ![](docs/images/批发后-逐题回顾2.png) |
+
+### Wrong Answers · 错题本
+
+| 错题复习列表 |
+|:---:|
+| ![](docs/images/错题本.png) |
+
+### History · 历史记录
+
+| 测验记录列表 |
+|:---:|
+| ![](docs/images/历史记录.png) |
 
 ---
 
 ## Architecture · 架构
 
 ```
-┌── Dashboard HTML ──┬── quiz_server.py (API) ──┬── quiz_generator.py
-│  (SPA, no framework)│                           │   Read Obsidian notes
-│  📊 Dashboard       │  POST /quiz/generate      │   → DeepSeek generates
-│  📚 Knowledge Base  │  POST /quiz/grade          │   → QA validation
-│  🧪 Quiz            │  POST /notes/import        │
-│  ❌ Wrong Answers   │  POST /notes/upload        ├── quiz_grader.py
-│  📈 History         │  POST /notes/transcribe    │   Load grading rubric
-│                     │  POST /notes/verify        │   → DeepSeek scores
-│                     │  DELETE /notes             │   → SM-2 scheduling
-│                     │  GET  /competency          │   → Wrong-answer cards
-│                     │  GET  /dashboard           │
-│                     │  GET  /history             └──────────────────────────┘
-└─────────────────────┴──────────────────────────────────────────────────────┘
+apps/web/ (纯 HTML SPA)          server/ (Flask + Blueprint)
+─────────────────────────        ────────────────────────────
+dashboard_v2.html                app.py (Flask 入口)
+  ↓ fetch('/v1/...')             ├── blueprints/
+  HTTP/JSON                      │   ├── quiz.py   /quiz/*
+                                 │   ├── notes.py  /notes/*
+                                 │   └── web.py    /
+                                 ├── cache.py (SQLite 缓存)
+                                 ├── stats.py (LLM 调用统计)
+                                 ├── quiz_generator.py (RAG 出题)
+                                 ├── quiz_grader.py (LLM 评分 + SM-2)
+                                 └── vault_core.py (原子写入 + WAL)
 ```
 
-## Tech Stack · 技术栈
+**前后端分离**：前端纯静态 HTML（零依赖，可独立部署）· 后端 Flask REST API（`/v1/*` 端点）· Swagger 文档（`/apidocs`）
 
-| Layer · 层 | Technology · 技术 |
-|:---|:---|
-| Frontend · 前端 | Vanilla HTML/CSS/JS (SPA, zero dependencies) |
-| Backend · 后端 | Python HTTP Server (stdlib) |
-| AI Engine · AI引擎 | DeepSeek v4-pro (quiz generation + grading + note import) |
-| Speech-to-Text · 语音识别 | faster-whisper (tiny) + yt-dlp |
-| Database · 数据库 | PostgreSQL (optional, file-mode fallback) |
-| Knowledge Base · 知识库 | Obsidian vault (Markdown + YAML frontmatter) |
-| Standards · 标准体系 | L0 immutable standards (rubric / competency / quality / naming) |
-
-## Quick Start · 快速开始
-
-**Zero dependencies beyond Python. No Docker, no PostgreSQL, no n8n required.**
-
-### Windows
-
-```bash
-# Double-click or run:
-start.bat
-```
-
-### Mac / Linux
-
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-### What it does
-
-1. First run: asks for your DeepSeek API Key → saved to `.env`
-2. Installs Python packages (`pip install -r requirements.txt`)
-3. Creates vault directories + copies templates
-4. Starts server at `http://localhost:5050` + opens browser
-
-### Manual start
-
-```bash
-# Copy config template
-cp .env.example .env
-# Edit .env — add your API key + choose vault mode
-pip install -r requirements.txt
-python server/quiz_server.py --port 5050
-```
-
-### Vault Storage Mode · 存储模式
-
-Knowledge Lab supports two storage modes, configured via `VAULT_PATH` in `.env`:
-
-| Mode | VAULT_PATH | Description |
-|------|------|------|
-| **Standalone** (default) | `./vault` | Notes stored in project directory. No external dependencies. |
-| **Obsidian-linked** | `/path/to/Obsidian/Vault` | Notes stored in your Obsidian Vault. Both apps read/write the same files. |
-
-> **If you use Obsidian**: Set `VAULT_PATH` to your Obsidian vault root. Knowledge Lab + Obsidian share the same `Knowledge Lab/` folder. Notes created in either app appear in both.
->
-> **If you don't use Obsidian**: Leave the default `./vault` — everything works standalone.
-
-See `.env.example` for detailed configuration examples.
-
-### Supported LLM Providers
-
-| Provider | LLM_PROVIDER | Model | API Key |
-|----------|:--:|------|------|
-| DeepSeek (default) | `deepseek` | deepseek-v4-pro | [Get Key](https://platform.deepseek.com) |
-| DeepSeek Flash | `deepseek-flash` | deepseek-v4-flash | Same as above |
-| OpenAI | `openai` | gpt-4.1 | [Get Key](https://platform.openai.com) |
-| Zhipu GLM | `zhipu` | glm-4 | [Get Key](https://open.bigmodel.cn) |
-| Ollama (local) | `ollama` | qwen2.5:7b | None (free) |
-
-Or set `LLM_API_URL` + `LLM_MODEL` directly for any OpenAI-compatible API.
-
-### Optional: PostgreSQL
-
-By default, data is stored as JSON files. If you want PostgreSQL:
-```bash
-export PG_HOST=localhost PG_PORT=5432 PG_DATABASE=n8n_scraper PG_USER=n8n PG_PASSWORD=your-pw
-psql -h $PG_HOST -U $PG_USER -d $PG_DATABASE -f sql/schema.sql
-```
+---
 
 ## Features · 功能
 
-### Six-Dimensional Competency Assessment · 六维能力评估
+| 功能 | 说明 |
+|------|------|
+| 📥 **内容导入** | URL / YouTube / 粘贴文本 → LLM 自动结构化 → Markdown 笔记 |
+| 🧪 **自动出题** | 扫描 Obsidian Vault → RAG 组装 Prompt → LLM 生成题目 → QA 门禁 |
+| 📝 **智能评分** | LLM 批改答案 → SM-2 间隔重复 → 错题自动入队 |
+| 📊 **能力雷达** | 六维能力评估（AI技术/评测/数据/产品/商业/工程） |
+| 🎙️ **语音输入** | YouTube 字幕提取 + faster-whisper 转录 |
+| ⚡ **响应缓存** | SQLite 缓存同题结果，命中延迟 < 50ms（提速 195x） |
+| 📈 **调用统计** | `/v1/stats` 查看 LLM 调用次数/延迟/Token/缓存命中率 |
 
-| Dimension · 维度 | Definition · 定义 |
-|:---|:---|
-| AI技术理解 · AI Technical Understanding | LLM / RAG / Agent / Prompt principles |
-| 评测体系搭建 · Evaluation System | Rubric design + Golden Set + LLM-as-Judge |
-| 数据驱动决策 · Data-Driven Decision | Metrics + A/B testing + Data flywheel |
-| 产品设计能力 · Product Design | 0→1 full product lifecycle |
-| 商业化思维 · Business Thinking | Pricing / Market / TAM / ROI |
-| 工程协作能力 · Engineering Collaboration | PRD / OKR / Tech review / Cross-team |
+---
 
-### Content Quality Flow · 内容质量保障
+## Quick Start · 快速开始
 
+### Windows
+```bash
+git clone https://github.com/baiwanwan1224-hub/Knowledge-Lab.git
+cd Knowledge-Lab
+copy .env.example .env          # 编辑 .env，填入 DeepSeek API Key
+start.bat                       # 自动安装依赖 + 启动服务
 ```
-URL/File import → status: draft → manual /notes/verify → status: ready → quiz-ready
+打开浏览器访问 http://localhost:5050
+
+### Mac / Linux
+```bash
+git clone https://github.com/baiwanwan1224-hub/Knowledge-Lab.git
+cd Knowledge-Lab
+cp .env.example .env            # 编辑 .env，填入 DeepSeek API Key
+bash start.sh                   # 自动安装依赖 + 启动服务
 ```
 
-- `draft` notes are excluded from quiz generation
-- `ready` notes are quiz-eligible
-- L0 standards define scoring rubric, competency dimensions, content quality checklist
+### 详细配置
+遇到问题？→ [完整配置指南](docs/SETUP.md)（API Key 获取、常见问题、Vault 模式、功能导览）
 
-### Video Import · 视频导入
+### API 文档
+启动后访问 http://localhost:5050/apidocs 查看 Swagger UI
 
-```
-YouTube → has captions? → youtube-transcript-api
-        → no captions?  → yt-dlp download audio → faster-whisper transcription
-        → no captions & no description → blocked (no empty notes created)
-```
+---
+
+## Tech Stack · 技术栈
+
+| 层 | 技术 | 说明 |
+|------|------|------|
+| 前端 | 纯 HTML/CSS/JS | 零框架，零构建步骤 |
+| 后端 | Python Flask 3.0+ | Blueprint 模块化 + pydantic 验证 |
+| AI | DeepSeek V4 Pro | 出题/评分/结构化（可切换 GLM-4/GPT-4.1/MiniMax M3） |
+| 存储 | JSON 文件（默认） | PostgreSQL 可选 |
+| 语音 | faster-whisper (tiny) + yt-dlp | 本地 CPU 推理 |
+| 缓存 | SQLite | 30 天 TTL，model_version 自动失效 |
+
+---
 
 ## Project Structure · 项目结构
 
 ```
 knowledge-lab/
-├── server/
-│   ├── quiz_server.py        # API server (HTTP + standards loading)
-│   ├── quiz_generator.py     # RAG quiz generation
-│   └── quiz_grader.py        # LLM grading + SM-2 + wrong-answer cards
-├── dashboard/
-│   └── dashboard_v2.html     # Unified dashboard SPA
-├── standards/                # L0 immutable standards
-├── sql/
-│   └── schema.sql            # PostgreSQL DDL
-├── templates/                # Obsidian note templates
-└── docs/images/              # Screenshots
+├── apps/web/           ← 前端 SPA
+├── server/             ← Flask API 后端
+│   ├── blueprints/     ← quiz / notes / web 路由
+│   ├── middleware/     ← API Key 认证
+│   ├── cache.py        ← LLM 响应缓存
+│   └── stats.py        ← 调用统计
+├── standards/          ← L0 不可变标准
+├── spec/               ← 产品文档 + 过程记录
+├── docs/               ← 技术文档 + 截图
+├── scripts/            ← 启动 + 备份脚本
+├── tmp/                ← 参考项目（MNN/openclaw/Dify/Anki...）
+└── vault/              ← 本地知识库
 ```
-
-## License · 许可
-
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
-
-**Commercial Use · 商用许可**: A separate commercial license is required for any commercial use (internal business deployment, SaaS, embedding in commercial products).
-
-Contact · 联系: baiwanwan1224@gmail.com
 
 ---
 
-Built by [@baiwanwan1224-hub](https://github.com/baiwanwan1224-hub) · 2026
+## LLM Provider · 模型切换
+
+| 模型 | 设置 `LLM_PROVIDER=` | 适用场景 |
+|------|---------------------|------|
+| DeepSeek V4 Pro | `deepseek`（默认） | 日常出题 · 综合最优 |
+| DeepSeek V4 Flash | `deepseek-flash` | 批量出题 · 速度优先 |
+| GLM-4 | `zhipu` | 中文内容 · 成本最低 |
+| GPT-4.1 | `openai` | 英文内容 · 质量最高 |
+| Ollama (本地) | `ollama` | 离线使用 · 零成本 |
+
+> ⚠️ **截图 OCR 需要多模态模型**：出题和批改只需文本 API。截图录入功能需要支持图片理解的多模态 LLM，在 `.env` 中配置相应 API Key 即可启用。不填则 OCR 功能不可用，不影响其他功能。
+
+---
+
+## L0 Standards · 不可变标准
+
+| ID | 名称 | 内容 |
+|----|------|------|
+| L0-001 | 评分标准 | 单选 0/1 · 简答/场景 0-5 · ≥70% 及格 · SM-2 |
+| L0-002 | 能力维度 | 6 维雷达图（AI/评测/数据/产品/商业/工程） |
+| L0-003 | 内容质量 | 5 项入库检查 + QA 门禁 |
+| L0-004 | 命名规范 | 文件名 `YYYYMMDD_{主题}_{来源}.md` |
+
+---
+
+## License · 许可
+
+AGPL v3.0 — 详见 [LICENSE](LICENSE)
+
+Commercial use requires a separate license. Contact: baiwanwan1224@gmail.com
+
+---
+
+Built with [Claude Code](https://claude.ai/code) · 2026

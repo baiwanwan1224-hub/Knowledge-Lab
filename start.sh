@@ -54,4 +54,4 @@ elif command -v xdg-open &> /dev/null; then
     xdg-open http://localhost:5050
 fi
 
-python3 server/quiz_server.py --port 5050
+python3 -m server.app

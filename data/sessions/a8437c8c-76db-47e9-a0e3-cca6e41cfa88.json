@@ -1,0 +1,16 @@
+{
+  "session_uuid": "a8437c8c-76db-47e9-a0e3-cca6e41cfa88",
+  "session_name": "产品管理测验 2026-07-28 12:59",
+  "created_at": "2026-07-28T12:59:18.649105",
+  "completed_at": "2026-07-28T13:00:19.320969",
+  "total_questions": 2,
+  "questions_correct": 2,
+  "total_score": 2.0,
+  "total_max": 2.0,
+  "score_percentage": 100.0,
+  "difficulty": "medium",
+  "topics": [
+    "产品管理"
+  ],
+  "status": "completed"
+}

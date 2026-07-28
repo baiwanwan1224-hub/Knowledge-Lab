@@ -1,0 +1,38 @@
+# LLM Pricing Reference · 2026-07
+# All prices in USD per 1M tokens unless noted
+
+models:
+  deepseek-v4-pro:
+    provider: DeepSeek
+    input_cost: 0.14    # $0.14 / 1M input tokens
+    output_cost: 0.28   # $0.28 / 1M output tokens
+    context_window: 131072
+    notes: "99% cache hit rate on Claude Code"
+
+  deepseek-v4-flash:
+    provider: DeepSeek
+    input_cost: 0.04
+    output_cost: 0.08
+    context_window: 131072
+    notes: "Lightweight fallback, 94.4% cache hit"
+
+  glm-4:
+    provider: Zhipu
+    input_cost: 0.014   # ¥0.1/1M → ~$0.014
+    output_cost: 0.014
+    context_window: 131072
+    notes: "Chinese content specialist"
+
+  minimax-m3:
+    provider: MiniMax
+    input_cost: 0.00    # Subscription: ¥49/month flat
+    output_cost: 0.00
+    context_window: 262144
+    notes: "Adversarial solver primary. Flat subscription, per-call cost ≈ $0"
+
+  gpt-4.1:
+    provider: OpenAI (via 4SAPI)
+    input_cost: 2.00    # $2.00 / 1M input
+    output_cost: 8.00   # $8.00 / 1M output
+    context_window: 131072
+    notes: "English content specialist. Most expensive option."
