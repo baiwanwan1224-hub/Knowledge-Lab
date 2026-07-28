@@ -12,6 +12,7 @@ scope: quiz_server.py /competency, dashboard_v2.html 雷达图
 
 > L0 不可变 · 六维能力雷达图的数据来源和评分基准
 > 变更必须记录到 `_LOG_标准变更记录.md`
+> 2026-07-28：关键词匹配逻辑已实现在 `server/blueprints/notes.py` competency 端点 · 初始分改为 0（未评估）· assessment_status 字段已加
 
 ---
 
