@@ -164,7 +164,15 @@ def main():
         raw_content = response.get('choices', [{}])[0].get('message', {}).get('content', '')[:800]
         print(f'[DEBUG] LLM returned 0 questions. Raw content (first 800 chars):\n{raw_content}', file=sys.stderr)
     checked = qa_check(questions)
-    output = {'status': 'success', 'session_name': f'{args.topic}测验 {datetime.now().strftime("%Y-%m-%d %H:%M")}', 'topics': [args.topic], 'difficulty': args.difficulty, 'source_notes': [{'title': n['title'], 'path': n['path'], 'hash': n['file_hash']} for n in notes], 'questions': checked, 'total': len(checked), 'passed_qa': sum(1 for q in checked if q['quality_passed']), 'generated_at': datetime.now().isoformat()}
+    # Collect actual topics from matched notes (not the query string — may be empty)
+    session_topics = set()
+    for n in notes:
+        for t in n.get('topics', []):
+            if t and t.strip():
+                session_topics.add(t.strip())
+    if not session_topics and args.topic:
+        session_topics.add(args.topic)
+    output = {'status': 'success', 'session_name': f'{args.topic or \"随机\"}测验 {datetime.now().strftime("%Y-%m-%d %H:%M")}', 'topics': list(session_topics)[:5], 'difficulty': args.difficulty, 'source_notes': [{'title': n['title'], 'path': n['path'], 'hash': n['file_hash']} for n in notes], 'questions': checked, 'total': len(checked), 'passed_qa': sum(1 for q in checked if q['quality_passed']), 'generated_at': datetime.now().isoformat()}
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
 if __name__ == '__main__':

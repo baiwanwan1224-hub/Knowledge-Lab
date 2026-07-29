@@ -601,6 +601,25 @@ def list_imports():
 
 @notes_bp.route('/competency')
 def competency():
+    # L0-005→L0-002: Direct topic-to-dimension mapping for standardized topics
+    TOPIC_TO_DIM = {
+        'AI Agent & 架构': 'AI技术理解',
+        'LLM & Prompt 工程': 'AI技术理解',
+        'RAG & 检索系统': 'AI技术理解',
+        'AI 产品设计': '产品设计能力',
+        'AI 评测 & 质量': '评测体系搭建',
+        '数据驱动决策': '数据驱动决策',
+        '商业化 & 定价': '商业化思维',
+        '增长 & 发布': '商业化思维',
+        '用户研究 & ICP': '产品设计能力',
+        '产品策略 & 路线图': '产品设计能力',
+        '工程协作 & 流程': '工程协作能力',
+        '内容 & SEO/GEO': '商业化思维',
+        '组织 & 沟通': '工程协作能力',
+        '竞争 & 定位': '商业化思维',
+        'AI 开发工具': '工程协作能力',
+    }
+
     # L0-002 v1.0 · Keyword mapping for 6 dimensions
     DIM_KEYWORDS = {
         'AI技术理解': ['AI技术', 'LLM', 'GPT', 'Claude', 'embedding', 'RAG', 'token', 'context',
@@ -660,7 +679,16 @@ def competency():
                             try: topics = json.loads(topics)
                             except: topics = [topics]
                         for topic in (topics if isinstance(topics, list) else [topics]):
-                            topic_str = str(topic)
+                            topic_str = str(topic).strip()
+                            if not topic_str:
+                                continue
+                            # L0-005 direct mapping (primary)
+                            if topic_str in TOPIC_TO_DIM:
+                                dim = TOPIC_TO_DIM[topic_str]
+                                dim_stats[dim]['total'] += s.get('total_questions', 0)
+                                dim_stats[dim]['wrong'] += s.get('total_questions', 0) - s.get('questions_correct', 0)
+                                continue
+                            # Keyword fallback (legacy)
                             for dim, keywords in DIM_KEYWORDS.items():
                                 if any(kw.lower() in topic_str.lower() for kw in keywords):
                                     dim_stats[dim]['total'] += s.get('total_questions', 0)
