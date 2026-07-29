@@ -55,7 +55,7 @@ knowledge-lab/
 │   └── vault_core.py
 ├── skills/                   ← 新建（对标 MNN skills/ + OpenClaw skills/）
 ├── standards/                ← 不变（对标 MNN schema/）
-├── spec/                     ← 新建（对标 OpenClaw VISION.md + 对方 PM 要求）
+├── spec/                     ← 新建（对标 OpenClaw VISION.md + 产品需求对齐）
 │   ├── STRUCTURE_MIGRATION.md
 │   ├── SERVER_REFACTOR_MIGRATION.md
 │   ├── PRD.md
@@ -75,7 +75,7 @@ knowledge-lab/
 ├── tools/                    ← 不变
 ├── templates/                ← 不变
 ├── sql/                      ← 不变
-├── tmp/                      ← 新建（对方 PM 直接建议）
+├── tmp/                      ← 新建（参考项目克隆 · 对标学习）
 │   ├── architecture/         # MNN + openclaw + anki
 │   ├── pipeline/             # dify
 │   └── modules/              # 预留
