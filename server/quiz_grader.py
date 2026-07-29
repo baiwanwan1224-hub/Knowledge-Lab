@@ -44,9 +44,14 @@ def grade_answer(question, user_answer):
 - 质量阈值：单题得分<60%标准分→标记为错题
 - 输出格式（严格JSON）：{{"score":3.5,"max_score":5.0,"is_correct":false,"feedback":"反馈...","strengths":[],"gaps":[],"weakness_tags":[],"misunderstanding":"","suggested_review":"","confidence":0.85}}
 - weakness_tags可选：概念理解不清、缺少具体案例、框架不完整、分析深度不足、表述不够精准、完全错误"""
-    resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
-        json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格但公平的评分专家。严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 1500}, timeout=60)
-    if resp.status_code != 200: return {'error': f'API error {resp.status_code}'}
+    if not LLM_API_KEY:
+        return {'error': 'LLM_API_KEY not configured — set it in .env'}
+    try:
+        resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+            json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格但公平的评分专家。严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 1500}, timeout=60)
+        if resp.status_code != 200: return {'error': f'API error {resp.status_code}'}
+    except Exception as e:
+        return {'error': f'LLM request failed: {str(e)[:200]}'}
     content = resp.json()['choices'][0]['message']['content'].strip()
     if content.startswith('```'): content = content.split('\n', 1)[1]
     if content.endswith('```'): content = content[:-3]

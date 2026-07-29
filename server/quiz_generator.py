@@ -109,10 +109,15 @@ def build_prompt(topic, count, types, difficulty, notes):
 直接输出JSON："""
 
 def call_llm(prompt):
-    resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
-        json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '你是AI产品经理教学专家，严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.7, 'max_tokens': 6000}, timeout=120)
-    if resp.status_code != 200: return {'error': f'API error {resp.status_code}: {resp.text}'}
-    return resp.json()
+    if not LLM_API_KEY:
+        return {'error': 'LLM_API_KEY not configured — set it in .env'}
+    try:
+        resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
+            json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '你是AI产品经理教学专家，严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.7, 'max_tokens': 6000}, timeout=120)
+        if resp.status_code != 200: return {'error': f'API error {resp.status_code}: {resp.text}'}
+        return resp.json()
+    except Exception as e:
+        return {'error': f'LLM request failed: {str(e)[:200]}'}
 
 def parse_response(response):
     if 'error' in response: return response
