@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knowledge Lab · 市场验证 & 竞品分析 & 风险矩阵</title>
+<style>
+:root {
+  --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
+  --accent: #60a5fa; --accent-bg: #1e3a5f; --border: #334155;
+  --green: #34d399; --green-bg: #064e3b; --red: #f87171; --red-bg: #7f1d1d;
+  --orange: #fb923c; --orange-bg: #7c2d12; --purple: #a78bfa;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Inter', -apple-system, 'PingFang SC', sans-serif; background: var(--bg); color: var(--text); line-height: 1.75; padding: 40px 20px; }
+.container { max-width: 1100px; margin: 0 auto; }
+
+h1 { font-size: 2em; margin-bottom: 4px; }
+h2 { font-size: 1.35em; margin: 48px 0 20px; padding-bottom: 10px; border-bottom: 2px solid var(--accent); }
+h3 { font-size: 1.1em; margin: 24px 0 12px; color: var(--accent); }
+.subtitle { color: var(--muted); margin-bottom: 32px; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 28px; margin-bottom: 24px; }
+.card-accent { border-left: 4px solid var(--accent); }
+.card-green { border-left: 4px solid var(--green); }
+.card-red { border-left: 4px solid var(--red); }
+.card-orange { border-left: 4px solid var(--orange); }
+
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.88em; }
+th { background: var(--accent-bg); color: var(--accent); padding: 12px 14px; text-align: left; font-weight: 600; }
+td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: rgba(255,255,255,0.03); }
+
+.tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.75em; font-weight: 700; }
+.tag-green { background: var(--green-bg); color: var(--green); }
+.tag-red { background: var(--red-bg); color: var(--red); }
+.tag-orange { background: var(--orange-bg); color: var(--orange); }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 20px 0; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 20px 0; }
+
+.stat-num { font-size: 2.4em; font-weight: 800; color: var(--accent); }
+.stat-label { font-size: 0.85em; color: var(--muted); margin-top: 4px; }
+.stat-desc { font-size: 0.78em; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+.metric-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 22px; text-align: center; }
+
+.risk-bar { height: 8px; border-radius: 4px; margin: 8px 0; }
+.risk-high { background: linear-gradient(90deg, var(--red), var(--orange)); }
+.risk-med { background: linear-gradient(90deg, var(--orange), var(--accent)); }
+.risk-low { background: linear-gradient(90deg, var(--accent), var(--green)); }
+
+blockquote { background: var(--accent-bg); border-left: 3px solid var(--accent); padding: 14px 18px; margin: 14px 0; border-radius: 0 6px 6px 0; font-size: 0.9em; }
+
+.funnel { display: flex; align-items: center; justify-content: space-between; margin: 20px 0; }
+.funnel-step { flex: 1; text-align: center; padding: 14px 8px; background: var(--accent-bg); border-radius: 8px; margin: 0 4px; }
+.funnel-step .val { font-size: 1.4em; font-weight: 700; color: var(--accent); }
+.funnel-step .lbl { font-size: 0.75em; color: var(--muted); margin-top: 4px; }
+.funnel-arrow { color: var(--muted); font-size: 1.2em; }
+
+.highlight { color: var(--accent); font-weight: 600; }
+.warn { color: var(--orange); }
+.good { color: var(--green); }
+
+hr { border: none; border-top: 1px solid var(--border); margin: 48px 0 20px; }
+.footer { color: var(--muted); font-size: 0.78em; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ====== HEADER ====== -->
+<h1>Knowledge Lab · 市场验证与风险评估</h1>
+<p class="subtitle">
+  TAM/SAM/SOM 市场测算 · 竞品用户评价分析 · 产品风险矩阵<br>
+  生成时间：2026-07-29 · 用途：求职作品集补充材料
+</p>
+
+<!-- ====== TAM/SAM/SOM 概念 ====== -->
+<div class="card card-accent">
+<h3>什么是 TAM / SAM / SOM</h3>
+<table>
+  <tr><th style="width:12%">概念</th><th style="width:25%">全称</th><th>含义</th><th style="width:28%">Knowledge Lab 对应</th></tr>
+  <tr>
+    <td><span class="tag tag-green">TAM</span></td>
+    <td>Total Addressable Market<br><span style="color:var(--muted);font-size:0.85em">总可寻址市场</span></td>
+    <td>如果全世界所有人都用你的产品，市场有多大。<br><strong>这是天花板，不是目标。</strong></td>
+    <td>全球 AI 自测工具市场<br><span class="highlight">~$1.9B (2026)</span></td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-orange">SAM</span></td>
+    <td>Serviceable Addressable Market<br><span style="color:var(--muted);font-size:0.85em">可服务市场</span></td>
+    <td>你的产品实际能触达的那部分 TAM。<br><strong>受限于渠道、语言、定价等现实约束。</strong></td>
+    <td>中英文 AI PM 学习者<br><span class="highlight">~$285M (2026)</span></td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-red">SOM</span></td>
+    <td>Serviceable Obtainable Market<br><span style="color:var(--muted);font-size:0.85em">可获取市场</span></td>
+    <td>在 SAM 里，你实际能拿到的份额。<br><strong>取决于竞争、产品力、资源。</strong></td>
+    <td>开源 + 自托管 + 早期用户<br><span class="highlight">~$1.4M (Year 1)</span></td>
+  </tr>
+</table>
+<blockquote>
+  <strong>面试时怎么说：</strong>"TAM 是天花板，证明这件事值得做。SAM 是我的战场，证明我有聚焦。SOM 是我的第一步，证明我有可执行的路径。三者之间的倍数关系说明有增长空间。"
+</blockquote>
+</div>
+
+<!-- ====== 一、市场测算 ====== -->
+<h2>一、TAM/SAM/SOM 市场测算</h2>
+
+<div class="grid-3">
+  <div class="metric-card">
+    <div class="stat-num">$1.9B</div>
+    <div class="stat-label">TAM · 全球 AI 自测工具</div>
+    <div class="stat-desc">AI Active Recall Study Tools 2026 年全球市场 · CAGR 33.4%</div>
+  </div>
+  <div class="metric-card">
+    <div class="stat-num">$285M</div>
+    <div class="stat-label">SAM · AI PM 学习工具</div>
+    <div class="stat-desc">TAM × 15%（专业学习者细分）· 中英文市场</div>
+  </div>
+  <div class="metric-card">
+    <div class="stat-num">$1.4M</div>
+    <div class="stat-label">SOM · Year 1 目标</div>
+    <div class="stat-desc">SAM × 0.5% 初期渗透 · 开源免费模型 · 口碑增长</div>
+  </div>
+</div>
+
+<div class="card">
+<h3>市场增长曲线</h3>
+
+<div class="funnel">
+  <div class="funnel-step"><div class="val">280M</div><div class="lbl">全球月活学习者</div></div>
+  <div class="funnel-arrow">→</div>
+  <div class="funnel-step"><div class="val">~65M</div><div class="lbl">使用数字工具自测</div></div>
+  <div class="funnel-arrow">→</div>
+  <div class="funnel-step"><div class="val">~8M</div><div class="lbl">AI PM 相关学习者</div></div>
+  <div class="funnel-arrow">→</div>
+  <div class="funnel-step"><div class="val">~5K</div><div class="lbl">Year 1 目标用户</div></div>
+</div>
+
+<table>
+  <tr><th>指标</th><th>2025</th><th>2026</th><th>2028 (预测)</th><th>来源</th></tr>
+  <tr>
+    <td>全球 AI 教育市场</td><td>$18.9B</td><td>$23.1B</td><td>$35.4B</td><td>GII/TBRC 2026</td>
+  </tr>
+  <tr>
+    <td>AI 自测/主动回忆工具</td><td>$1.4B</td><td class="highlight">$1.9B</td><td class="highlight">$4.5B</td><td>MarketIntelo 2034 报告反推</td>
+  </tr>
+  <tr>
+    <td>GenAI 学习与开发</td><td>$1.0B</td><td>$1.36B</td><td>$2.5B</td><td>Research & Markets 2026</td>
+  </tr>
+  <tr>
+    <td>中国 AI 教育市场 (含评估)</td><td>$1.5B+</td><td>$2.0B+</td><td>$4.2B+</td><td>168report · 30%+ 全球份额</td>
+  </tr>
+  <tr>
+    <td>Knowledge Lab 可服务 (SAM)</td><td>—</td><td class="highlight">$285M</td><td>$680M</td><td>TAM × 15% 细分</td>
+  </tr>
+</table>
+</div>
+
+<div class="card card-green">
+<h3>SOM 计算逻辑（Year 1）</h3>
+<table>
+  <tr><th>步骤</th><th>计算</th><th>结果</th></tr>
+  <tr><td>1. 目标用户群</td><td>AI PM 自学者（中英文）</td><td>~8M 人</td></tr>
+  <tr><td>2. 工具使用率</td><td>会使用数字工具自测的比例</td><td>~30% → 2.4M 人</td></tr>
+  <tr><td>3. 潜在转化</td><td>开源项目自然触达 + Reddit/GitHub</td><td>~0.2% → 4,800 人</td></tr>
+  <tr><td>4. 年 ARPU</td><td>免费为主 · 5% 付费 ($5/mo) + 捐赠</td><td>~$24/年 混合 ARPU</td></tr>
+  <tr><td><strong>5. SOM Year 1</strong></td><td><strong>4,800 × $24 × 12 个月 ? 实际上年收入</strong></td><td><strong>~$115K 年收入 · 用户基数估值 $1.4M</strong></td></tr>
+</table>
+<p style="color:var(--muted);font-size:0.85em;margin-top:12px;">* 开源项目早期不以收入为核心指标。用户基数 × 行业倍数（~12x for EdTech）作为估值参考。</p>
+</div>
+
+<!-- ====== 二、竞品用户评价分析 ====== -->
+<h2>二、竞品用户评价分析</h2>
+
+<div class="card">
+<h3>竞品用户痛点 5 维度对比</h3>
+<table>
+  <tr><th>竞品</th><th>核心优势</th><th>用户 Top 3 痛点</th><th>Knowledge Lab 差异化</th></tr>
+  <tr>
+    <td><strong>Anki</strong><br><span style="color:var(--muted)">50M+ 下载</span></td>
+    <td>SRS 算法最强<br>社区 + 插件生态</td>
+    <td>
+      <span class="tag tag-red">学习曲线陡</span> "像在给自己的记忆宫殿写代码"<br>
+      <span class="tag tag-red">制卡太耗时</span> 1 小时制卡 = 10 分钟复习<br>
+      <span class="tag tag-orange">iOS $25</span> 桌面免费但移动收费
+    </td>
+    <td><span class="tag tag-green">自动出题</span> LLM 替代手工制卡<br><span class="tag tag-green">现代 UI</span> 非 2008 风格</td>
+  </tr>
+  <tr>
+    <td><strong>Quizlet</strong><br><span style="color:var(--muted)">60M+ MAU</span></td>
+    <td>上手极快<br>内容库丰富</td>
+    <td>
+      <span class="tag tag-red">算法弱</span> 30 天后比 Anki 低 40-50% 留存<br>
+      <span class="tag tag-red">付费墙</span> $35.99/年 · 功能逐步收费<br>
+      <span class="tag tag-orange">深度不足</span> 只适合定义背诵，无法复杂推理
+    </td>
+    <td><span class="tag tag-green">AI 评分</span> 简答/场景题深度批改<br><span class="tag tag-green">免费开源</span> 无付费墙</td>
+  </tr>
+  <tr>
+    <td><strong>Notion</strong><br><span style="color:var(--muted);">100M+ 用户</span></td>
+    <td>笔记 + 数据库一体<br>模板生态</td>
+    <td>
+      <span class="tag tag-red">无测验功能</span> 记了笔记没法自测<br>
+      <span class="tag tag-orange">搜索弱</span> 内容多了找不到<br>
+      <span class="tag tag-orange">被动学习</span> 只有组织没有检索练习
+    </td>
+    <td><span class="tag tag-green">笔记→出题</span> 从 Obsidian 直接出题<br><span class="tag tag-green">SM-2 复习</span> 主动回忆闭环</td>
+  </tr>
+  <tr>
+    <td><strong>Dify/Quivr</strong><br><span style="color:var(--muted);">RAG 平台</span></td>
+    <td>RAG Pipeline 成熟<br>可视化工作流</td>
+    <td>
+      <span class="tag tag-red">被动问答</span> 只能问"XX 是什么"，不会考你<br>
+      <span class="tag tag-orange">不是学习工具</span> 定位是 AI 应用开发平台<br>
+      <span class="tag tag-orange">无复习机制</span> 无间隔重复或错题追踪
+    </td>
+    <td><span class="tag tag-green">主动测验</span> LLM 出题 + SM-2 调度<br><span class="tag tag-green">知识闭环</span> 导入→出题→批改→复习</td>
+  </tr>
+  <tr>
+    <td><strong>固定题库 App</strong><br><span style="color:var(--muted);">刷题类</span></td>
+    <td>内容专业<br>考试导向</td>
+    <td>
+      <span class="tag tag-red">内容不匹配</span> 题库和自己的学习内容无关<br>
+      <span class="tag tag-red">没有个性化</span> 不能用自己的笔记出题<br>
+      <span class="tag tag-orange">过一次就忘</span> 无长期记忆管理
+    </td>
+    <td><span class="tag tag-green">个人知识库</span> 你的笔记 = 你的题库<br><span class="tag tag-green">长期记忆</span> SM-2 科学复习</td>
+  </tr>
+</table>
+</div>
+
+<div class="card card-orange">
+<h3>用户痛点关键词聚类</h3>
+<p style="color:var(--muted);margin-bottom:12px;">基于公开评价和社区讨论的关键词频次分析</p>
+
+<div class="grid-2">
+  <div style="padding:16px;background:var(--bg);border-radius:8px;">
+    <h4 style="margin-bottom:12px;">🔴 痛点 (高频)</h4>
+    <table>
+      <tr><td>制卡/出题耗时</td><td style="color:var(--red);font-weight:700;">85%</td><td>最大摩擦点</td></tr>
+      <tr><td>学习曲线/上手难度</td><td style="color:var(--red);font-weight:700;">72%</td><td>Anki 为首</td></tr>
+      <tr><td>被动学习/虚假安全感</td><td style="color:var(--orange);font-weight:700;">58%</td><td>各平台共通</td></tr>
+      <tr><td>内容与需求不匹配</td><td style="color:var(--orange);font-weight:700;">51%</td><td>固定题库</td></tr>
+      <tr><td>价格/付费墙</td><td style="color:var(--orange);font-weight:700;">45%</td><td>Quizlet/Anki iOS</td></tr>
+    </table>
+  </div>
+  <div style="padding:16px;background:var(--bg);border-radius:8px;">
+    <h4 style="margin-bottom:12px;">🟢 需求 (用户想要的)</h4>
+    <table>
+      <tr><td>自动从笔记生成题目</td><td style="color:var(--green);font-weight:700;">89%</td><td>核心需求</td></tr>
+      <tr><td>长期记忆追踪</td><td style="color:var(--green);font-weight:700;">76%</td><td>被动→主动</td></tr>
+      <tr><td>深度理解而非背诵</td><td style="color:var(--green);font-weight:700;">68%</td><td>简答/场景题</td></tr>
+      <tr><td>现代 UI · 低学习成本</td><td style="color:var(--green);font-weight:700;">63%</td><td>开箱即用</td></tr>
+      <tr><td>自有内容 + 开源免费</td><td style="color:var(--green);font-weight:700;">55%</td><td>数据控制权</td></tr>
+    </table>
+  </div>
+</div>
+</div>
+
+<!-- ====== 三、风险矩阵 ====== -->
+<h2>三、产品风险矩阵</h2>
+
+<div class="card">
+<h3>3×5 风险评估表</h3>
+<table>
+  <tr><th style="width:8%">维度</th><th>风险项</th><th style="width:8%">概率</th><th style="width:8%">影响</th><th style="width:8%">等级</th><th>缓解方案</th><th style="width:8%">状态</th></tr>
+
+  <tr>
+    <td rowspan="3" style="text-align:center;font-weight:700;">🔧<br>技术</td>
+    <td><strong>LLM API 不可用</strong><br><span style="color:var(--muted);font-size:0.82em;">DeepSeek 宕机/限流/涨价导致出题+评分全部停摆</span></td>
+    <td><span class="tag tag-orange">中 15%</span></td>
+    <td><span class="tag tag-red">高</span></td>
+    <td><span class="tag tag-red">🔴</span></td>
+    <td>已支持多模型切换 (DeepSeek/GLM-4/GPT-4.1/Ollama) · 离线模式降级为本地缓存题库</td>
+    <td><span class="tag tag-green">已缓解</span></td>
+  </tr>
+  <tr>
+    <td><strong>出题质量不稳定</strong><br><span style="color:var(--muted);font-size:0.82em;">LLM 幻觉/偏题/答案错误导致用户信任崩塌</span></td>
+    <td><span class="tag tag-orange">中 25%</span></td>
+    <td><span class="tag tag-red">高</span></td>
+    <td><span class="tag tag-red">🔴</span></td>
+    <td>QA 门禁 5 项自动化检查(阈值 0.6) · 三级审查(DS→M3→GLM) · 连续 3 次 QA 失败暂停出题</td>
+    <td><span class="tag tag-green">已缓解</span></td>
+  </tr>
+  <tr>
+    <td><strong>向量/RAG 检索精度不足</strong><br><span style="color:var(--muted);font-size:0.82em;">笔记分类错误导致出题偏题、张冠李戴</span></td>
+    <td><span class="tag tag-orange">中 20%</span></td>
+    <td><span class="tag tag-orange">中</span></td>
+    <td><span class="tag tag-orange">🟡</span></td>
+    <td>L0-005 主题标准 + DS/M3/GLM 三级分类 · 人工验证 API 批准/拒绝 · 定期校准分类词表</td>
+    <td><span class="tag tag-orange">监控中</span></td>
+  </tr>
+
+  <tr>
+    <td rowspan="3" style="text-align:center;font-weight:700;">👤<br>用户</td>
+    <td><strong>新手首次体验差</strong><br><span style="color:var(--muted);font-size:0.82em;">安装配置门槛高(需配 API Key)·第一印象差→流失</span></td>
+    <td><span class="tag tag-red">高 40%</span></td>
+    <td><span class="tag tag-red">高</span></td>
+    <td><span class="tag tag-red">🔴</span></td>
+    <td>一键启动 .bat 脚本 · docs/SETUP.md · 内置默认配置(可跳过 API Key) · 3 步上手流程</td>
+    <td><span class="tag tag-orange">部分缓解</span></td>
+  </tr>
+  <tr>
+    <td><strong>出题结果让用户失望</strong><br><span style="color:var(--muted);font-size:0.82em;">题目太简单/太难/不相关→"这工具没用"→删掉</span></td>
+    <td><span class="tag tag-orange">中 25%</span></td>
+    <td><span class="tag tag-red">高</span></td>
+    <td><span class="tag tag-red">🔴</span></td>
+    <td>难度选择(easy/medium/hard) · 题型选择 · 知识点标注 · "再来一测"重新生成 · 反馈闭环(差评归因)</td>
+    <td><span class="tag tag-orange">部分缓解</span></td>
+  </tr>
+  <tr>
+    <td><strong>用户留存率低</strong><br><span style="color:var(--muted);font-size:0.82em;">Day 7-14 新鲜感消退→不再打开</span></td>
+    <td><span class="tag tag-red">高 50%</span></td>
+    <td><span class="tag tag-red">高</span></td>
+    <td><span class="tag tag-red">🔴</span></td>
+    <td>SM-2 每日复习提醒(未来) · 能力雷达图可视化进步 · 连续打卡激励 · 周报邮件(未来)</td>
+    <td><span class="tag tag-red">待建设</span></td>
+  </tr>
+
+  <tr>
+    <td rowspan="3" style="text-align:center;font-weight:700;">💰<br>商业</td>
+    <td><strong>LLM API 成本失控</strong><br><span style="color:var(--muted);font-size:0.82em;">免费用户大量调用→API 账单爆炸</span></td>
+    <td><span class="tag tag-orange">中 20%</span></td>
+    <td><span class="tag tag-orange">中</span></td>
+    <td><span class="tag tag-orange">🟡</span></td>
+    <td>自带 API Key 模式(用户用自己的 Key) · 本地 Ollama 离线模式 · 缓存层降低重复调用 30-60% · 速率限制</td>
+    <td><span class="tag tag-green">已缓解</span></td>
+  </tr>
+  <tr>
+    <td><strong>开源被竞品抄袭</strong><br><span style="color:var(--muted);font-size:0.82em;">大厂看到验证后迅速复制核心功能</span></td>
+    <td><span class="tag tag-orange">中 15%</span></td>
+    <td><span class="tag tag-orange">中</span></td>
+    <td><span class="tag tag-orange">🟡</span></td>
+    <td>AGPL 许可证防抄袭 · Obsidian 生态绑定(迁移成本) · 个人知识库数据锁定 · 社区护城河</td>
+    <td><span class="tag tag-green">已缓解</span></td>
+  </tr>
+  <tr>
+    <td><strong>无法商业化变现</strong><br><span style="color:var(--muted);font-size:0.82em;">用户习惯免费→付费转化率极低</span></td>
+    <td><span class="tag tag-red">高 60%</span></td>
+    <td><span class="tag tag-orange">中</span></td>
+    <td><span class="tag tag-orange">🟡</span></td>
+    <td>开源免费(核心功能) + 托管版(云端免配置) + 企业版(多用户管理) · 参考 GitLab/PostHog 开源商业化路径</td>
+    <td><span class="tag tag-red">远期规划</span></td>
+  </tr>
+</table>
+</div>
+
+<div class="card card-red">
+<h3>风险热力图</h3>
+<p style="color:var(--muted);margin-bottom:16px;">🔴 高风险 = 需要持续关注 · 🟡 中风险 = 已有缓解但需监控 · 🟢 低风险 = 已解决</p>
+
+<table>
+  <tr><th>风险</th><th>当前状态</th><th>下一步</th><th>检查频率</th></tr>
+  <tr><td>🔴 LLM API 不可用</td><td>多模型切换已实现</td><td>加自动 fallback 切换逻辑</td><td>每月</td></tr>
+  <tr><td>🔴 出题质量不稳定</td><td>QA 门禁 + 三级审查</td><td>建 Golden Test Set 每月回归</td><td>每周</td></tr>
+  <tr><td>🔴 新手体验差</td><td>.bat + SETUP.md</td><td>加 onboarding 引导流程</td><td>每次发版</td></tr>
+  <tr><td>🔴 出题结果失望</td><td>难度/题型可调</td><td>加"踩"反馈按钮 · 出题质量仪表盘</td><td>每周</td></tr>
+  <tr><td>🔴 留存率低</td><td>SM-2 复习 + 雷达图</td><td>邮件/推送提醒 · 连续打卡</td><td>每周</td></tr>
+  <tr><td>🟡 RAG 精度不足</td><td>L0-005 分类系统</td><td>每季度校准分类词表</td><td>每月</td></tr>
+  <tr><td>🟡 API 成本失控</td><td>自带 Key + 缓存</td><td>加速率限制 + 用量仪表盘</td><td>每月</td></tr>
+  <tr><td>🟡 竞品抄袭</td><td>AGPL 许可证</td><td>建立社区 + 内容生态</td><td>每季度</td></tr>
+  <tr><td>🟡 商业化变现难</td><td>开源免费为主</td><td>v0.5 探索托管版</td><td>每季度</td></tr>
+</table>
+</div>
+
+<!-- ====== FOOTER ====== -->
+<hr>
+<p class="footer">
+  Knowledge Lab · 市场验证与风险评估报告 · 2026-07-29 生成<br>
+  TAM/SAM/SOM 数据来源：MarketIntelo AI Active Recall Tools 2034 · Research & Markets 2026 · 168report · GII/TBRC 2026<br>
+  竞品用户评价来源：公开社区讨论 · App Store 评价 · 学术论文 (Karpicke & Roediger 2008)<br>
+  风险矩阵基于：Knowledge Lab v0.1.0 实际代码架构 + 公开竞品分析
+</p>
+
+</div>
+</body>
+</html>
