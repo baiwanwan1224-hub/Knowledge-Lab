@@ -26,6 +26,10 @@
 - test_schemas.py: `test_topic_optional` replaces `test_topic_required`
 - test_api.py: `test_generate_missing_topic` updated for optional topic
 
+### Demo · 演示视频
+- YouTube: https://youtu.be/55a1-DYoH3E
+- Bilibili: https://www.bilibili.com/video/BV1Gj3n6VEvQ/
+
 ---
 
 ## v0.1.0 (2026-07-28)
