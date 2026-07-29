@@ -475,16 +475,23 @@ def delete_note():
     try: body = DeleteRequest(**(request.get_json(force=True, silent=True) or {}))
     except Exception as e: return error_response(ErrorCode.INVALID_JSON, str(e))
 
-    safe = os.path.basename(body.file)
-    if '..' in safe or '/' in safe:
+    raw = body.file.replace('\\', '/')
+    if '..' in raw:
         return error_response(ErrorCode.INVALID_JSON, "Invalid file path")
 
-    # Search across all note directories
+    # Search across all note directories — try full relative path first, then basename
     target = None
     for search_dir in [NOTES_DIR] + EXTRA_NOTE_DIRS:
-        candidate = os.path.join(search_dir, safe)
+        # Try full relative path (handles subdirectory correctly)
+        candidate = os.path.join(search_dir, raw)
         if os.path.exists(candidate):
             target = candidate
+            break
+        # Try just the basename
+        safe = os.path.basename(raw)
+        candidate2 = os.path.join(search_dir, safe)
+        if os.path.exists(candidate2):
+            target = candidate2
             break
         # Also search subdirectories
         if os.path.exists(search_dir):
@@ -495,10 +502,10 @@ def delete_note():
             if target: break
 
     if not target or not os.path.exists(target):
-        return error_response(ErrorCode.NOTE_NOT_FOUND, f"Note not found: {safe}", 404)
+        return error_response(ErrorCode.NOTE_NOT_FOUND, f"Note not found: {raw}", 404)
 
     os.remove(target)
-    return jsonify({'status': 'success', 'deleted': safe})
+    return jsonify({'status': 'success', 'deleted': raw})
 
 
 @notes_bp.route('/notes/screenshot_ocr', methods=['POST'])
