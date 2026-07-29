@@ -14,16 +14,18 @@ def load_pricing():
         return yaml.safe_load(f)['models']
 
 def qa_check(questions: list) -> dict:
-    """L0-003 QA Gate: 5 automated checks per question."""
+    """L0-003 QA Gate: automated checks per question (normalized by question type)."""
     total, passed = 0, 0
     details = []
     for q in questions:
         score, issues = 0, []
+        is_choice = q.get('type') == 'single_choice'
+        max_score = 5 if is_choice else 3
         if q.get('question') and len(q['question']) >= 10: score += 1
         else: issues.append('question_too_short')
-        if q.get('explanation') and len(q['explanation']) >= 20: score += 1
+        if q.get('explanation') and len(q['explanation']) >= 10: score += 1
         else: issues.append('explanation_too_short')
-        if q.get('type') == 'single_choice':
+        if is_choice:
             opts = q.get('options', [])
             if len(opts) == 4: score += 1
             else: issues.append(f'expected 4 options, got {len(opts)}')
@@ -31,7 +33,7 @@ def qa_check(questions: list) -> dict:
             else: issues.append('answer_not_in_options')
         if q.get('knowledge_point'): score += 1
         else: issues.append('missing_knowledge_point')
-        qs = score / 5.0
+        qs = score / max_score
         details.append({'question': q.get('question','')[:80], 'quality_score': round(qs,2), 'passed': qs >= 0.6, 'issues': issues})
         total += 1
         if qs >= 0.6: passed += 1

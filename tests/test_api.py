@@ -108,14 +108,13 @@ class TestQuizGenerate:
         assert resp.status_code == 200
 
     def test_generate_missing_topic(self, client):
-        """Missing required field should return error."""
+        """Missing topic defaults to empty string (random all notes)."""
         resp = client.post('/v1/quiz/generate',
-            data=json.dumps({'count': 5}),
+            data=json.dumps({'count': 3}),
             content_type='application/json'
         )
-        assert resp.status_code == 400
-        data = resp.get_json()
-        assert data['error'] == 'INVALID_JSON'
+        # Should succeed (topic optional since L0-005 classifier)
+        assert resp.status_code in (200, 502)  # 502 if LLM API unreachable in test
 
     def test_generate_nocache(self, client):
         """nocache flag should bypass cache (LLM may occasionally return empty)."""

@@ -1,5 +1,5 @@
 """Quiz Blueprint — /quiz/generate, /quiz/grade · P0+P1: cache + retry + stats"""
-import os, sys, json, subprocess, uuid, hashlib, time, logging
+import os, sys, json, subprocess, uuid, hashlib, time, logging, tempfile
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from ..schemas import GenerateRequest, GradeRequest
@@ -62,10 +62,12 @@ def generate():
     retries = 0
     for attempt in range(1 + len(RETRY_BACKOFF)):
         try:
+            env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'}
             result = subprocess.run(
                 [sys.executable, GEN_SCRIPT, '--topic', body.topic, '--count', str(body.count),
                  '--types', body.types, '--difficulty', body.difficulty],
-                capture_output=True, text=True, timeout=120, cwd=SCRIPTS_DIR, stdin=subprocess.DEVNULL)
+                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120,
+                cwd=SCRIPTS_DIR, stdin=subprocess.DEVNULL, env=env)
             data = json.loads(result.stdout)
             if 'error' in data:
                 raise RuntimeError(data['error'])
@@ -128,23 +130,34 @@ def grade():
     # ── P0: Retry + stats ──
     last_error = None; retries = 0
     for attempt in range(1 + len(RETRY_BACKOFF)):
+        tmp_path = None
         try:
-            result = subprocess.run(
-                [sys.executable, GRADE_SCRIPT, '--input', json.dumps(grade_input, ensure_ascii=False)],
-                capture_output=True, text=True, timeout=120, cwd=SCRIPTS_DIR, stdin=subprocess.DEVNULL)
-            data = json.loads(result.stdout)
-            if 'error' in data: raise RuntimeError(data['error'])
-            break
-        except subprocess.TimeoutExpired as e:
-            last_error = e; retries = attempt
-            if attempt < len(RETRY_BACKOFF):
-                logger.warning(f'LLM grade timeout → retry {attempt+1}/{len(RETRY_BACKOFF)}')
-                time.sleep(RETRY_BACKOFF[attempt])
-        except Exception as e:
-            last_error = e; retries = attempt
-            if attempt < len(RETRY_BACKOFF):
-                logger.warning(f'LLM grade failed → retry {attempt+1}/{len(RETRY_BACKOFF)}, reason: {e}')
-                time.sleep(RETRY_BACKOFF[attempt])
+            try:
+                # Write grade input to temp file (avoids WinError 206 filename too long)
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tf:
+                    json.dump(grade_input, tf, ensure_ascii=False)
+                    tmp_path = tf.name
+                env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'}
+                result = subprocess.run(
+                    [sys.executable, GRADE_SCRIPT, '--input-file', tmp_path],
+                    capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120,
+                    cwd=SCRIPTS_DIR, stdin=subprocess.DEVNULL, env=env)
+                data = json.loads(result.stdout)
+                if 'error' in data: raise RuntimeError(data['error'])
+                break
+            except subprocess.TimeoutExpired as e:
+                last_error = e; retries = attempt
+                if attempt < len(RETRY_BACKOFF):
+                    logger.warning(f'LLM grade timeout → retry {attempt+1}/{len(RETRY_BACKOFF)}')
+                    time.sleep(RETRY_BACKOFF[attempt])
+            except Exception as e:
+                last_error = e; retries = attempt
+                if attempt < len(RETRY_BACKOFF):
+                    logger.warning(f'LLM grade failed → retry {attempt+1}/{len(RETRY_BACKOFF)}, reason: {e}')
+                    time.sleep(RETRY_BACKOFF[attempt])
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
     else:
         stats.record(ENDPOINT_QUIZ_GRADE, os.environ.get('LLM_MODEL',''), {}, int((time.time()-t0)*1000), retries=retries, error=str(last_error))
         logger.error(f'LLM grade exhausted retries: {last_error}')

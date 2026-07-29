@@ -93,7 +93,13 @@ def _scan_notes(topic=None):
                     for i, line in enumerate(content.split('\n')):
                         if line.startswith('title:'): title = line.split(':',1)[1].strip().strip('"')
                         if line.startswith('topics:'):
-                            topics = [t.strip().strip('"[]').replace('"','') for t in line.split(':',1)[1].split(',')]
+                            raw = line.split(':', 1)[1].strip()
+                            if raw.startswith('['):
+                                try: topics = json.loads(raw)
+                                except Exception:
+                                    topics = [t.strip().strip('"[]').replace('"','') for t in raw.split(',')]
+                            else:
+                                topics = [t.strip().strip('"[]').replace('"','') for t in raw.split(',')]
                         if line.startswith('status:'): status = line.split(':',1)[1].strip()
                         if line.startswith('source:'): source = line.split(':',1)[1].strip()
                         if line.startswith('date:'): date_str = line.split(':',1)[1].strip()
@@ -180,6 +186,19 @@ def _save_note(content, topic="", source_url="", original_name=""):
         fname = f'{date_str}_{slug}.md'
     filepath = os.path.join(NOTES_DIR, fname)
     topics_list = [t.strip() for t in topic.split(',') if t.strip()]
+
+    # Auto-classify via RAG pipeline if no user topic provided
+    if not topics_list:
+        try:
+            from classifier import TopicClassifier
+            classifier = TopicClassifier()
+            auto_topics = classifier.classify(content, use_m3_review=True)
+            if auto_topics:
+                topics_list = auto_topics
+                print(f'[Classifier] Auto-classified "{title}" → {topics_list}', file=sys.stderr)
+        except Exception as e:
+            print(f'[Classifier] Classification failed for "{title}": {e}', file=sys.stderr)
+
     frontmatter = f'---\ntitle: "{title}"\ntopics: {json.dumps(topics_list, ensure_ascii=False)}\nsource: "{source_url}"\ndate: {date_str}\nstatus: draft\n---\n\n'
     final_content = frontmatter + content
     with open(filepath, 'w', encoding='utf-8') as f:
@@ -534,7 +553,8 @@ def topics():
     for n in notes:
         for t in n.get('topics', []):
             topic_counts[t.strip()] += 1
-    return jsonify([{'name': k, 'count': v} for k, v in sorted(topic_counts.items(), key=lambda x: -x[1])])
+    sorted_topics = [k for k, v in sorted(topic_counts.items(), key=lambda x: -x[1])]
+    return jsonify({'topics': sorted_topics, 'notes_count': len(notes), 'counts': {k: v for k, v in topic_counts.items()}})
 
 @notes_bp.route('/notes')
 def list_notes():

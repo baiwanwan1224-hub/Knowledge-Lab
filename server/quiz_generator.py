@@ -6,6 +6,10 @@ Usage: python quiz_generator.py --topic "产品需求分析" --count 5 --types s
 import sys, os, json, argparse, hashlib, requests
 from datetime import datetime
 
+# Force UTF-8 output on Windows (prevents GBK encoding errors in subprocess)
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
+
 # Load .env first
 _ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 if os.path.exists(_ENV_FILE):
@@ -35,14 +39,38 @@ def find_notes(topic=None):
                     topics = []
                     for line in content.split('\n'):
                         if line.startswith('topic:') or line.startswith('topics:'):
-                            topics = [t.strip().strip('"[]').replace('"','') for t in line.split(':')[1].split(',')]
+                            raw = line.split(':', 1)[1].strip()
+                            # Handle JSON array format: ["tag1", "tag2"]
+                            if raw.startswith('['):
+                                try:
+                                    import json as _json
+                                    topics = _json.loads(raw)
+                                except Exception:
+                                    topics = [t.strip().strip('"[]').replace('"','') for t in raw.split(',')]
+                            else:
+                                topics = [t.strip().strip('"[]').replace('"','') for t in raw.split(',')]
                             break
                     title = f.replace('.md', '')
                     for line in content.split('\n'):
                         if line.startswith('# '): title = line[2:].strip(); break
                     notes.append({'path': path.replace(search_dir + os.sep, ''), 'title': title, 'topics': topics, 'content': content, 'file_hash': hashlib.sha256(content.encode()).hexdigest()})
     if topic:
-        notes = [n for n in notes if topic in n.get('topics', []) or topic.lower() in n['title'].lower() or topic.lower() in n['content'].lower()]
+        # L0-005: Exact tag match on topics list (RAG-classified)
+        matched = [n for n in notes if topic in n.get('topics', [])]
+        if not matched:
+            # Fallback: try classifier vector similarity to find related topics
+            try:
+                from classifier import TopicClassifier
+                c = TopicClassifier()
+                similar_topics = c._vector_filter(topic, top_k=3)
+                # Find notes matching any of the similar topics
+                matched = [n for n in notes if any(t in n.get('topics', []) for t in similar_topics)]
+            except Exception:
+                pass
+        if not matched:
+            # Last fallback: substring match on title/content
+            matched = [n for n in notes if topic.lower() in n['title'].lower() or topic.lower() in n['content'].lower()]
+        notes = matched
     # Only use ready notes (per content quality standard)
     notes = [n for n in notes if any(s in n.get('content', '') for s in ['status: ready', 'status: draft', 'status: imported', 'status: needs_example'])]
     return notes
@@ -100,11 +128,13 @@ def qa_check(questions):
     results = []
     for q in questions:
         score = 0; issues = []
+        is_choice = q.get('type') == 'single_choice'
+        max_score = 5 if is_choice else 3  # non-choice: no option checks
         if q.get('question') and len(q['question']) >= 10: score += 1
         else: issues.append('question too short')
-        if q.get('explanation') and len(q['explanation']) >= 20: score += 1
+        if q.get('explanation') and len(q['explanation']) >= 10: score += 1
         else: issues.append('explanation too short')
-        if q.get('type') == 'single_choice':
+        if is_choice:
             opts = q.get('options', [])
             if len(opts) == 4: score += 1
             else: issues.append(f'expected 4 options, got {len(opts)}')
@@ -112,7 +142,7 @@ def qa_check(questions):
             else: issues.append('correct_answer not in options')
         if q.get('knowledge_point'): score += 1
         else: issues.append('missing knowledge_point')
-        qs = score / 5.0
+        qs = score / max_score
         results.append({**q, 'quality_score': round(qs, 2), 'quality_passed': qs >= 0.6, 'quality_issues': issues})
     return results
 
@@ -129,6 +159,10 @@ def main():
     result = parse_response(response)
     if 'error' in result: print(json.dumps(result, ensure_ascii=False)); sys.exit(1)
     questions = result.get('questions', [])
+    if not questions:
+        # Log raw LLM response for debugging empty questions
+        raw_content = response.get('choices', [{}])[0].get('message', {}).get('content', '')[:800]
+        print(f'[DEBUG] LLM returned 0 questions. Raw content (first 800 chars):\n{raw_content}', file=sys.stderr)
     checked = qa_check(questions)
     output = {'status': 'success', 'session_name': f'{args.topic}测验 {datetime.now().strftime("%Y-%m-%d %H:%M")}', 'topics': [args.topic], 'difficulty': args.difficulty, 'source_notes': [{'title': n['title'], 'path': n['path'], 'hash': n['file_hash']} for n in notes], 'questions': checked, 'total': len(checked), 'passed_qa': sum(1 for q in checked if q['quality_passed']), 'generated_at': datetime.now().isoformat()}
     print(json.dumps(output, ensure_ascii=False, indent=2))

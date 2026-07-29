@@ -51,12 +51,12 @@ class TestGenerateRequest:
         with pytest.raises(Exception):
             GenerateRequest.model_validate({'topic': '测试', 'count': 21})
 
-    def test_topic_required(self):
-        """Topic is required."""
-        with pytest.raises(Exception):
-            GenerateRequest.model_validate({})
-        with pytest.raises(Exception):
-            GenerateRequest.model_validate({'count': 5})
+    def test_topic_optional(self):
+        """Topic defaults to empty string (random all notes)."""
+        result = GenerateRequest.model_validate({})
+        assert result.topic == ""
+        result2 = GenerateRequest.model_validate({'count': 5})
+        assert result2.topic == ""
 
     def test_nocache_ignored(self):
         """nocache field should be silently ignored (not in schema)."""

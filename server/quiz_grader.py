@@ -6,6 +6,10 @@ Usage: python quiz_grader.py --input-file /tmp/session.json
 import sys, os, json, argparse, requests
 from datetime import datetime, timedelta
 
+# Force UTF-8 output on Windows (prevents GBK encoding errors in subprocess)
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
+
 # Load .env first
 _ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 if os.path.exists(_ENV_FILE):

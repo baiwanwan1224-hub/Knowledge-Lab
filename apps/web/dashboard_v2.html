@@ -1043,17 +1043,8 @@ async function loadTopicsDropdown() {
 }
 
 async function startQuiz(force) {
-  let topic = document.getElementById('qzTopic').value || document.getElementById('qzTopicCustom').value.trim();
-  // Random default: pick a random topic from the list
-  if (!topic) {
-    const options = [...document.getElementById('qzTopic').options].filter(o => o.value);
-    if (options.length > 1) {
-      topic = options[Math.floor(Math.random() * (options.length - 1)) + 1].value;
-    } else {
-      topic = 'AI产品经理';
-    }
-    document.getElementById('qzTopicCustom').value = topic;
-  }
+  // Custom input > dropdown value; both empty → pass empty → backend uses all notes
+  let topic = document.getElementById('qzTopicCustom').value.trim() || document.getElementById('qzTopic').value;
 
   const count = parseInt(document.getElementById('qzCount').value);
   const difficulty = document.getElementById('qzDifficulty').value;
@@ -1076,6 +1067,10 @@ async function startQuiz(force) {
       showToast('出题失败：' + (quizData.detail || quizData.error), 'error');
       resetQuizSetup(); return;
     }
+    if (!quizData.questions || quizData.questions.length === 0) {
+      showToast('出题失败：LLM 未能生成题目，请尝试更换主题或题型后重试', 'error');
+      resetQuizSetup(); return;
+    }
     document.getElementById('quizLoading').classList.add('hidden');
     document.getElementById('quizSetup').style.display = 'none';
     document.getElementById('quizArea').classList.remove('hidden');
@@ -1096,13 +1091,21 @@ function exitQuiz() {
   document.getElementById('quizSetup').style.display = '';
   document.getElementById('quizSetup').style.opacity = '1';
   document.getElementById('startBtn').disabled = false;
+  var sb = document.getElementById('submitBtn');
+  if (sb) { sb.disabled = false; sb.classList.add('hidden'); }
   quizData = null; answers = {}; currentQ = 0;
 }
 
+function resetQuizBtn() {
+  var sb = document.getElementById('submitBtn');
+  if (sb) { sb.disabled = false; sb.classList.add('hidden'); }
+}
 function resetQuizSetup() {
   document.getElementById('quizLoading').classList.add('hidden');
+  document.getElementById('quizArea').classList.add('hidden');
   document.getElementById('quizSetup').style.opacity = '1';
   document.getElementById('startBtn').disabled = false;
+  resetQuizBtn();
 }
 
 function renderQuiz() {
@@ -1136,7 +1139,9 @@ function renderQuiz() {
   document.getElementById('prevBtn').style.display = currentQ === 0 ? 'none' : '';
   const isLast = currentQ === quizData.questions.length - 1;
   document.getElementById('nextBtn').style.display = isLast ? 'none' : '';
-  document.getElementById('submitBtn').classList.toggle('hidden', !isLast);
+  var sb = document.getElementById('submitBtn');
+  sb.disabled = false;
+  sb.classList.toggle('hidden', !isLast);
 }
 
 function selectQOption(label) { answers[currentQ] = label; renderQuiz(); }
@@ -1167,12 +1172,14 @@ async function submitQuiz() {
     });
     const result = await resp.json();
     document.getElementById('quizLoading').classList.add('hidden');
+    if (result.error) {
+      showToast('批改失败：' + (result.detail || result.error), 'error');
+      exitQuiz(); return;
+    }
     renderQuizResult(result);
   } catch(e) {
     handleError(e, '批改');
-    document.getElementById('submitBtn').disabled = false;
-    document.getElementById('quizLoading').classList.add('hidden');
-    document.getElementById('quizArea').classList.remove('hidden');
+    exitQuiz();
   }
 }
 
