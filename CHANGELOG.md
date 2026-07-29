@@ -79,4 +79,3 @@
 - Long PDF auto-split not yet working (spec/PDF_LONG_SPLIT.md)
 - Mobile responsive adaptation pending (spec/MOBILE_RESPONSIVE.md)
 - Multi-user isolation pending (spec/MULTI_USER_ISOLATION.md)
-- Demo video pending
