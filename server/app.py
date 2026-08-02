@@ -94,6 +94,13 @@ def create_app():
     print(f'[API]  API Base   → http://localhost:5050/v1')
     print(f'[Auth] {"Enabled" if os.environ.get("API_KEY", "").strip() else "Disabled (local dev mode)"}')
 
+    # ── Quality Gate startup stats ──
+    try:
+        from .quality_gate import print_startup_stats
+        print_startup_stats()
+    except Exception:
+        pass  # Non-critical, skip if vault not available
+
     return app
 
 

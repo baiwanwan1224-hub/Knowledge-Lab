@@ -16,6 +16,7 @@
 | SKILL-005 | [截图 OCR 多模态识别](05_screenshot_ocr.md) | 内容处理 | ✅ | `server/blueprints/notes.py` |
 | SKILL-006 | [Vault 防丢架构](06_vault_anti_loss.md) | 基础设施 | ✅ | `server/vault_core.py` |
 | SKILL-007 | [Vibe Coding Prompt 工程](07_prompt_engineering.md) | 开发方法论 | ✅ | `spec/prompts.md` |
+| SKILL-008 | [数据清洗管线](08_data_cleaning_pipeline.md) | 数据处理 | ✅ | `server/html_cleaner.py` · `server/dedup.py` · `server/quality_gate.py` |
 
 ---
 

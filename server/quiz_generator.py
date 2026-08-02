@@ -58,22 +58,35 @@ def find_notes(topic=None):
         # L0-005: Exact tag match on topics list (RAG-classified)
         matched = [n for n in notes if topic in n.get('topics', [])]
         if not matched:
-            # Fallback: try classifier vector similarity to find related topics
+            # Fallback: try classifier for related topics
             try:
                 from classifier import TopicClassifier
                 c = TopicClassifier()
                 similar_topics = c._vector_filter(topic, top_k=3)
-                # Find notes matching any of the similar topics
-                matched = [n for n in notes if any(t in n.get('topics', []) for t in similar_topics)]
+                if similar_topics:
+                    matched = [n for n in notes if any(t in n.get('topics', []) for t in similar_topics)]
+                else:
+                    print(f'[Classifier] No similar topics found for "{topic}"', file=sys.stderr)
             except Exception:
                 pass
         if not matched:
             # Last fallback: substring match on title/content
             matched = [n for n in notes if topic.lower() in n['title'].lower() or topic.lower() in n['content'].lower()]
         notes = matched
-    # Only use ready notes (per content quality standard)
-    notes = [n for n in notes if any(s in n.get('content', '') for s in ['status: ready', 'status: draft', 'status: imported', 'status: needs_example'])]
-    return notes
+    # Quality Gate (L0-003): Only use status: ready notes
+    eligible = []
+    skipped = 0
+    for n in notes:
+        content = n.get('content', '')
+        if 'status: ready' in content:
+            eligible.append(n)
+        else:
+            skipped += 1
+    if skipped > 0:
+        print(f'[QualityGate] Skipped {skipped} non-ready notes (only "ready" notes are used for quiz generation)', file=sys.stderr)
+    if not eligible and notes:
+        print(f'[QualityGate] ERROR: {len(notes)} notes found for topic but 0 are "ready". Use the dashboard to review and approve draft notes.', file=sys.stderr)
+    return eligible
 
 def build_prompt(topic, count, types, difficulty, notes):
     context = ''

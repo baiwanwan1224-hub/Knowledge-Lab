@@ -716,11 +716,10 @@ function unhighlightDim() {
 
 // ============ TAB 2: KNOWLEDGE BASE ============
 function noteMeta(n) {
-  // Parse date from backend date_str (file mtime) or filename
+  // Use backend-parsed metadata (from unified frontmatter_utils)
   const fname = n.file || n.path || '';
-  const dateMatch = fname.match(/^(\d{8})_/);
-  const date = dateMatch ? dateMatch[1] : (n.date_str || '');
-  const formattedDate = date ? `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}` : '';
+  const date = n.date || n.date_str || '';
+  const formattedDate = date ? (date.length === 8 ? `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}` : date.slice(0,10)) : '';
   // Source — abbreviate long names
   let source = n.source || '';
   const SOURCE_ABBR = {
@@ -731,17 +730,18 @@ function noteMeta(n) {
     'Lenny Skills': 'Lenny',
   };
   source = SOURCE_ABBR[source] || source;
-  if (!source) {
+  if (!source && fname) {
     const parts = fname.replace('.md','').split('_');
     const lastPart = parts[parts.length - 1];
-    const knownSources = ['URL', 'GH', '手动', '本地', '课程', 'LLM'];
-    source = knownSources.includes(lastPart) ? lastPart : (n.scan_dir || n.dir || '');
+    const knownSources = ['URL', 'GH'];
+    source = knownSources.includes(lastPart) ? lastPart : '';
   }
-  if (source.startsWith('http')) source = 'URL';
-  const status = n.status || 'ready';
+  if (source && source.startsWith('http')) source = 'URL';
+  const status = n.status || 'draft';
   const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
-  const isNew = date === today;
-  return { date, formattedDate, source, status, isNew };
+  const dateStr = date.length === 8 ? date : date.replace(/-/g, '');
+  const isNew = dateStr === today;
+  return { date: dateStr, formattedDate, source, status, isNew };
 }
 
 function renderNotes() {

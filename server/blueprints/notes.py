@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from ..schemas import ImportRequest, PasteRequest, VerifyRequest, DeleteRequest, TranscribeRequest, ScreenshotOcrRequest, IngestRequest
 from ..errors import ErrorCode, error_response
 from ..config import is_allowed_extension, MAX_UPLOAD_BYTES
+from .. import html_cleaner, transcription_cleaner, frontmatter_utils, dedup
 
 notes_bp = Blueprint('notes', __name__)
 
@@ -56,14 +57,7 @@ def load_standards():
             fpath = os.path.join(STANDARDS_DIR, fname)
             try:
                 with open(fpath, 'r', encoding='utf-8') as f: content = f.read()
-                fm = {}; body = content
-                if content.startswith('---'):
-                    parts = content.split('---', 2)
-                    if len(parts) >= 3:
-                        for line in parts[1].split('\n'):
-                            if ':' in line:
-                                k, v = line.split(':', 1); fm[k.strip()] = v.strip()
-                        body = parts[2]
+                fm, body = frontmatter_utils.parse_frontmatter(content)
                 key = fname.replace('.md', '')
                 STANDARDS[key] = {'frontmatter': fm, 'body': body.strip()}
             except Exception as e:
@@ -87,33 +81,29 @@ def _scan_notes(topic=None):
                     try:
                         with open(path, 'r', encoding='utf-8') as f: content = f.read()
                     except: continue
-                    title = fname.replace('.md', '')
-                    topics = []; status = 'draft'; source = ''; date_str = ''; author = ''
-                    body_start = 0
-                    for i, line in enumerate(content.split('\n')):
-                        if line.startswith('title:'): title = line.split(':',1)[1].strip().strip('"')
-                        if line.startswith('topics:'):
-                            raw = line.split(':', 1)[1].strip()
-                            if raw.startswith('['):
-                                try: topics = json.loads(raw)
-                                except Exception:
-                                    topics = [t.strip().strip('"[]').replace('"','') for t in raw.split(',')]
-                            else:
-                                topics = [t.strip().strip('"[]').replace('"','') for t in raw.split(',')]
-                        if line.startswith('status:'): status = line.split(':',1)[1].strip()
-                        if line.startswith('source:'): source = line.split(':',1)[1].strip()
-                        if line.startswith('date:'): date_str = line.split(':',1)[1].strip()
-                        if line.startswith('author:'): author = line.split(':',1)[1].strip()
-                        if line.startswith('# ') and not title: title = line[2:].strip()
-                        if line == '---': body_start = i+1
-                    # Preview: first 120 chars of body after frontmatter
-                    body_lines = content.split('\n')[body_start:] if body_start else content.split('\n')[6:]
-                    preview = ' '.join([l.strip() for l in body_lines if l.strip() and not l.startswith('#')][:2])[:120]
+                    # Use unified frontmatter parser
+                    fm, body = frontmatter_utils.parse_frontmatter(content)
+                    title = fm.get('title', fname.replace('.md', ''))
+                    topics = fm.get('topics', [])
+                    if isinstance(topics, str):
+                        topics = [t.strip() for t in topics.split(',')]
+                    status = frontmatter_utils.validate_status(fm.get('status', 'draft'))
+                    source = fm.get('source', '')
+                    date_str = fm.get('date', '')
+                    author = fm.get('author', '')
+                    # Extract title from first H1 if not in frontmatter
+                    if not title or title == fname.replace('.md', ''):
+                        for line in body.split('\n'):
+                            if line.startswith('# '):
+                                title = line[2:].strip()
+                                break
+                    # Preview: first 120 chars of body
+                    preview = ' '.join([l.strip() for l in body.split('\n') if l.strip() and not l.startswith('#')][:2])[:120]
                     mtime = os.path.getmtime(path)
                     notes.append({
                         'path': path.replace(str(search_dir) + os.sep, ''), 'title': title,
                         'topics': topics, 'status': status, 'source': source, 'date': date_str,
-                        'author': author, 'preview': preview, 'content': content[:500],
+                        'author': author, 'preview': preview, 'content': body[:500],
                         'mtime': mtime, 'file_hash': hashlib.sha256(content.encode()).hexdigest()
                     })
     if topic:
@@ -127,6 +117,11 @@ def _ai_structure(raw_text, filename):
     model = os.environ.get('LLM_MODEL', 'deepseek-v4-pro')
     if not api_key:
         return raw_text
+
+    # Pre-check: reject effectively empty content before LLM call
+    if html_cleaner.is_empty_content(raw_text, min_chars=100):
+        return '[CONTENT_EMPTY]'
+
     try:
         # DeepSeek can handle ~16K chars comfortably. For longer docs, split.
         MAX_CHUNK = 50000
@@ -151,7 +146,7 @@ def _ai_structure(raw_text, filename):
                 prefix = f'(第{i+1}/{len(chunks)}部分) ' if len(chunks) > 1 else ''
                 payload = {
                     'model': model,
-                    'messages': [{'role': 'user', 'content': f'{prefix}请将以下文本整理为结构化的 Markdown 笔记。添加合适的标题、分段、列表。保留所有原始信息，只调整格式：\n\n{chunk}'}],
+                    'messages': [{'role': 'user', 'content': f'{prefix}请将以下文本整理为结构化的 Markdown 笔记。添加合适的标题、分段、列表。保留所有原始信息，只调整格式。\n\n重要：如果原文内容极少或仅为导航/广告/页脚等无效内容，请直接返回"[CONTENT_EMPTY] 无法提取有效内容"而不是编造信息。\n\n{chunk}'}],
                     'temperature': 0.3
                 }
                 resp = requests.post(api_url,
@@ -160,7 +155,11 @@ def _ai_structure(raw_text, filename):
                 data = resp.json()
                 structured = data['choices'][0]['message']['content']
                 if structured and structured.strip():
-                    results.append(structured)
+                    # Skip if LLM returned empty-content marker
+                    if '[CONTENT_EMPTY]' in structured:
+                        results.append('[CONTENT_EMPTY]')
+                    else:
+                        results.append(structured)
                 else:
                     results.append(chunk)  # LLM returned empty, keep raw
             except Exception:
@@ -170,6 +169,10 @@ def _ai_structure(raw_text, filename):
         return raw_text
 
 def _save_note(content, topic="", source_url="", original_name=""):
+    # Guard: reject empty content (only the explicit marker)
+    if '[CONTENT_EMPTY]' in content:
+        return None, None, []
+
     title = ""
     for line in content.split('\n'):
         if line.startswith('# '): title = line[2:].strip(); break
@@ -199,11 +202,22 @@ def _save_note(content, topic="", source_url="", original_name=""):
         except Exception as e:
             print(f'[Classifier] Classification failed for "{title}": {e}', file=sys.stderr)
 
-    frontmatter = f'---\ntitle: "{title}"\ntopics: {json.dumps(topics_list, ensure_ascii=False)}\nsource: "{source_url}"\ndate: {date_str}\nstatus: draft\n---\n\n'
-    final_content = frontmatter + content
+    frontmatter = frontmatter_utils.build_frontmatter(
+        title=title, topics=topics_list, source=source_url,
+        date=date_str, status='draft'
+    )
+    final_content = frontmatter + '\n\n' + content
+
+    # Dedup check before writing
+    is_dup, dup_path = dedup.is_duplicate(final_content, str(NOTES_DIR))
+    if is_dup and dup_path:
+        print(f'[Dedup] Duplicate detected: "{title}" matches {os.path.basename(dup_path)}. Skipping.', file=sys.stderr)
+        dup_fname = os.path.basename(dup_path)
+        return dup_fname, title, topics_list, True
+
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(final_content)
-    return fname, title, topics_list
+    return fname, title, topics_list, False
 
 # ═══════════════════════════════════════
 # POST endpoints
@@ -226,8 +240,8 @@ def _do_import_url(url, topic=""):
         return error_response(ErrorCode.NOT_FOUND, f"Cannot fetch URL: {e}")
 
     # Detect thin/JS-rendered pages: little actual text content
-    text_content = re.sub(r'<[^>]+>', ' ', raw).strip()
-    if len(text_content) < 500:
+    text_content = html_cleaner.clean_html(raw)
+    if html_cleaner.is_empty_content(raw, min_chars=200):
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
@@ -241,10 +255,22 @@ def _do_import_url(url, topic=""):
         except Exception:
             pass  # Playwright render failed, use HTTP result
 
-    structured = _ai_structure(raw, url.split('/')[-1][:40] or 'url_import')
-    fname, title, topics_list = _save_note(structured, topic, url)
+    # Clean HTML before sending to LLM
+    cleaned = html_cleaner.extract_main_content(raw)
+
+    # Guard: reject if effectively empty after cleaning
+    if html_cleaner.is_empty_content(cleaned, min_chars=100):
+        return jsonify({'status': 'no_content', 'detail': 'URL content was empty or could not be extracted. The page may require authentication or JavaScript rendering that is not supported.'}), 200
+
+    structured = _ai_structure(cleaned, url.split('/')[-1][:40] or 'url_import')
+    # Guard: LLM empty-content marker
+    if '[CONTENT_EMPTY]' in structured:
+        return jsonify({'status': 'no_content', 'detail': 'Could not extract meaningful content from this URL.'}), 200
+
+    fname, title, topics_list, is_dup = _save_note(structured, topic, url)
     log_import('url', url, title, topics_list, fname)
-    return jsonify({'status': 'success', 'file': fname, 'title': title, 'topics': topics_list})
+    status = 'duplicate' if is_dup else 'success'
+    return jsonify({'status': status, 'file': fname, 'title': title, 'topics': topics_list})
 
 
 @notes_bp.route('/notes/paste', methods=['POST'])
@@ -254,10 +280,17 @@ def paste_note():
     return _do_import_url("", body.topic) if not body.content else _handle_paste(body.content, body.topic)
 
 def _handle_paste(content, topic=""):
+    if html_cleaner.is_empty_content(content, min_chars=10):
+        return jsonify({'status': 'no_content', 'detail': 'Pasted content was too short or empty.'}), 200
     structured = _ai_structure(content, 'paste')
-    fname, title, topics_list = _save_note(structured, topic, "paste")
+    if '[CONTENT_EMPTY]' in structured:
+        return jsonify({'status': 'no_content', 'detail': 'Could not extract meaningful content.'}), 200
+    fname, title, topics_list, is_dup = _save_note(structured, topic, "paste")
+    if fname is None:
+        return jsonify({'status': 'no_content', 'detail': 'Could not create note from empty content.'}), 200
     log_import('paste', 'paste', title, topics_list, fname)
-    return jsonify({'status': 'success', 'file': fname, 'title': title, 'topics': topics_list})
+    status = 'duplicate' if is_dup else 'success'
+    return jsonify({'status': status, 'file': fname, 'title': title, 'topics': topics_list})
 
 
 @notes_bp.route('/notes/upload', methods=['POST'])
@@ -298,7 +331,7 @@ def upload_file():
         if not ocr_results:
             return error_response(ErrorCode.NO_CONTENT, "所有截图 OCR 均失败")
         combined = '\n\n---\n\n'.join(ocr_results)
-        fname, title, topics_list = _save_note(combined, '', 'screenshot-batch', f'截图_{len(image_files)}张')
+        fname, title, topics_list, _ = _save_note(combined, '', 'screenshot-batch', f'截图_{len(image_files)}张')
         log_import('ocr', 'screenshot-batch', title, topics_list, fname)
         return jsonify({'status': 'success', 'file': fname, 'title': title, 'image_count': len(image_files)})
 
@@ -341,7 +374,7 @@ def upload_file():
                 return error_response(ErrorCode.NO_CONTENT, "截图未识别到文字")
         except Exception as e:
             return error_response(ErrorCode.LLM_API_ERROR, f"OCR 失败: {str(e)[:150]}", 502)
-        fname, title, topics_list = _save_note(raw_text, '', f'ocr: {safe_name}', safe_name)
+        fname, title, topics_list, _ = _save_note(raw_text, '', f'ocr: {safe_name}', safe_name)
         log_import('ocr', safe_name, title, topics_list, fname)
         return jsonify({'status': 'success', 'file': fname, 'title': title, 'type': 'ocr'})
 
@@ -394,7 +427,7 @@ def upload_file():
             content = f'> 本文档共 {len(parts)} 篇，这是第 {i+1} 篇。\n\n{content}'
         else:
             part_name = safe_name
-        fname, title, topics_list = _save_note(content, topic, f"upload: {part_name}", part_name)
+        fname, title, topics_list, _ = _save_note(content, topic, f"upload: {part_name}", part_name)
         log_import('upload', part_name, title, topics_list, fname)
         results.append({'file': fname, 'title': title, 'topics': topics_list})
 
@@ -431,8 +464,11 @@ def transcribe():
     if not transcript_text:
         return error_response(ErrorCode.TRANSCRIBE_FAILED, "No captions available and transcription failed", 422)
 
+    # Clean transcript before saving
+    transcript_text = transcription_cleaner.clean_transcript(transcript_text)
+
     body.topic = body.topic or 'youtube'
-    fname, title, topics_list = _save_note(transcript_text, body.topic, url)
+    fname, title, topics_list, _ = _save_note(transcript_text, body.topic, url)
     log_import('youtube', url, title, topics_list, fname)
     return jsonify({'status': 'success', 'file': fname, 'title': title, 'transcript_length': len(transcript_text)})
 
@@ -461,8 +497,10 @@ def verify_note():
     if body.action == 'approve':
         content = content.replace('status: draft', 'status: ready')
         content = content.replace('status: needs_revision', 'status: ready')
+        content = content.replace('status: imported', 'status: ready')
     elif body.action == 'reject':
         content = content.replace('status: draft', 'status: needs_revision')
+        content = content.replace('status: imported', 'status: needs_revision')
 
     with open(target_file, 'w', encoding='utf-8') as f:
         f.write(content)
@@ -536,7 +574,7 @@ def screenshot_ocr():
     except Exception as e:
         return error_response(ErrorCode.LLM_API_ERROR, str(e), 502)
 
-    fname, title, topics_list = _save_note(text, '', "screenshot_ocr")
+    fname, title, topics_list, _ = _save_note(text, '', "screenshot_ocr")
     log_import('ocr', 'screenshot', title, topics_list, fname)
     return jsonify({'status': 'success', 'file': fname, 'text': text[:500]})
 
@@ -545,9 +583,14 @@ def screenshot_ocr():
 def ingest():
     try: body = IngestRequest(**(request.get_json(force=True, silent=True) or {}))
     except Exception as e: return error_response(ErrorCode.INVALID_JSON, str(e))
-    fname, title, topics_list = _save_note(body.content, '', body.source)
+    if html_cleaner.is_empty_content(body.content, min_chars=20):
+        return jsonify({'status': 'no_content', 'detail': 'Content was too short or empty.'}), 200
+    fname, title, topics_list, is_dup = _save_note(body.content, '', body.source)
+    if fname is None:
+        return jsonify({'status': 'no_content', 'detail': 'Could not create note from empty content.'}), 200
     log_import('webhook', body.source, title, topics_list, fname)
-    return jsonify({'status': 'success', 'file': fname})
+    status = 'duplicate' if is_dup else 'success'
+    return jsonify({'status': status, 'file': fname})
 
 # ═══════════════════════════════════════
 # GET endpoints

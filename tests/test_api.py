@@ -175,9 +175,9 @@ class TestNotesCRUD:
 
     def test_paste_and_verify(self, client):
         """Paste text → get note detail → verify → delete."""
-        # Paste
+        # Paste (use substantial content to pass the empty-content guard)
         resp = client.post('/v1/notes/paste',
-            data=json.dumps({'content': '# 测试笔记\n\n这是一个测试段落。'}),
+            data=json.dumps({'content': '# AI产品经理能力模型\n\nAI产品经理需要具备三个核心能力维度：技术理解、产品设计和商业思维。\n\n技术理解方面，需要了解LLM的基本原理，包括Token、上下文窗口、温度等概念。\n\n产品设计方面，需要掌握用户研究、竞品分析和原型设计的方法论。'}),
             content_type='application/json'
         )
         assert resp.status_code == 200
@@ -190,7 +190,7 @@ class TestNotesCRUD:
         assert resp.status_code == 200
         detail = resp.get_json()
         assert 'content' in detail
-        assert '测试笔记' in detail['content']
+        assert 'AI' in detail['content']
 
         # Verify (approve)
         resp = client.post('/v1/notes/verify',

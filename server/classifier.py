@@ -338,6 +338,10 @@ class TopicClassifier:
         # Step 1: Keyword pre-filter — find top-5 candidate topics
         candidates = self._vector_filter(note_content, top_k=5)
 
+        # Fallback: if no keyword matches, use full taxonomy for LLM classification
+        if not candidates:
+            candidates = list(TOPICS.keys())
+
         # Step 2: DS primary classification
         ds_topics = _ds_classify(note_content, candidates)
 
@@ -362,19 +366,19 @@ class TopicClassifier:
 
         return final_topics[:5]  # Max 5 topics per note
 
-    def _vector_filter(self, note_content: str, top_k: int = 5) -> list[str]:
-        """Find top-k candidate topics via keyword similarity."""
-        # Keyword-based similarity (embedding API unavailable, skip to avoid 30s timeout)
+    def _vector_filter(self, note_content: str, top_k: int = 5, min_score: int = 1) -> list[str]:
+        """Find top-k candidate topics via keyword similarity.
+
+        Only returns topics with score >= min_score. Does NOT pad with
+        zero-score topics — that would fabricate unrelated labels.
+        """
         scores = []
         note_lower = note_content.lower()
         for name, info in TOPICS.items():
             score = sum(1 for kw in info['keywords'] if kw.lower() in note_lower)
             scores.append((name, score))
         scores.sort(key=lambda x: -x[1])
-        # Return topics with score > 0, plus at least 5
-        result = [name for name, s in scores if s > 0]
-        if len(result) < top_k:
-            result += [name for name, s in scores if name not in result][:top_k - len(result)]
+        result = [name for name, s in scores if s >= min_score]
         return result[:top_k]
 
     def batch_classify(self, note_paths: list[str], use_m3: bool = True) -> dict:
