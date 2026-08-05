@@ -124,6 +124,38 @@ created: {date_str}
     with open(filepath, 'w', encoding='utf-8') as f: f.write(card)
     return filepath
 
+def update_learner_memory(results, store=None, session_id='learner'):
+    """MEMORY_ENABLE=1: aggregate grading outcomes into learner long-term memory.
+
+    把本轮答题表现（知识点 + 对错 + 薄弱点/理解偏差）压缩成学习者记忆，
+    经忠实度门禁后持久化。任何失败都不中断批改主流程（记忆只是增强）。
+    返回 {'status': 'updated'|'rejected'|'skipped'|'error', ...}。
+    """
+    if os.environ.get('MEMORY_ENABLE', '') != '1':
+        return {'status': 'skipped'}
+    try:
+        from memory_core import MemoryStore, update_memory
+        history = []
+        for r in results:
+            if r.get('error'):
+                continue
+            kp = r.get('knowledge_point', '')
+            status = '正确' if r.get('is_correct') else '错误'
+            content = f'本轮自测题目考察「{kp}」，用户回答{status}'
+            tags = r.get('weakness_tags') or []
+            mis = r.get('misunderstanding') or ''
+            if tags:
+                content += '，薄弱点：' + '、'.join(str(t) for t in tags)
+            if mis:
+                content += f'，理解偏差：{mis}'
+            history.append({'role': 'user', 'content': content})
+        if not history:
+            return {'status': 'skipped'}
+        return update_memory(session_id, history, store=store or MemoryStore())
+    except Exception as e:
+        return {'status': 'error', 'error': str(e), 'note': '记忆更新失败不影响批改'}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', default=None); parser.add_argument('--input-file', default=None)
@@ -146,7 +178,11 @@ def main():
             obsidian_path = write_wrong_answer_card(q, a, grade, sm2, source_note, session_uuid)
             sm2['obsidian_path'] = obsidian_path; wrong_count += 1
         total_score += grade.get('score', 0); total_max += grade.get('max_score', 5)
-        results.append({'question_index': i, 'question_text': q.get('question', '')[:100], 'user_answer': a[:200], **grade, 'sm2': sm2 if sm2 else None, 'is_wrong': is_wrong})
+        results.append({'question_index': i, 'question_text': q.get('question', '')[:100], 'user_answer': a[:200], 'knowledge_point': q.get('knowledge_point', ''), **grade, 'sm2': sm2 if sm2 else None, 'is_wrong': is_wrong})
+    # 记忆写侧（可选）：批改后把答题表现压缩成学习者长期记忆，不影响输出契约
+    mem_result = update_learner_memory(results)
+    if mem_result.get('status') not in ('skipped',):
+        print(f"[MEMORY] learner memory update: {mem_result.get('status')}", file=sys.stderr)
     output = {'status': 'success', 'session_uuid': session_uuid, 'total_score': round(total_score, 1), 'total_max': total_max, 'score_pct': round(total_score / total_max * 100, 1) if total_max > 0 else 0, 'total_questions': len(questions), 'correct_count': len(questions) - wrong_count, 'wrong_count': wrong_count, 'results': results, 'graded_at': datetime.now().isoformat()}
     print(json.dumps(output, ensure_ascii=False, indent=2))
 

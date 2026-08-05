@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "note": "黄金集标注规则：每条 QA pair 的 note_path = 理想答案来源笔记。判定检索命中=top-k 中出现该笔记。query 为自然语言提问，故意与标题不完全同词，用于测试语义检索。种子为自动采样生成，建议人工审核/补充到 30 条。",
+  "pairs": [
+    {
+      "query": "什么是 产品工具栈？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_product-tool-stack.md",
+      "note_hint": "产品工具栈",
+      "topic": "工程协作 & 流程",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 理想客户画像定义？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_defining-icp.md",
+      "note_hint": "理想客户画像定义",
+      "topic": "用户研究 & ICP",
+      "source": "auto-seed"
+    },
+    {
+      "query": "AI 产品领域，AI 原生 UX 设计 的核心方法是什么？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_ai-native-ux.md",
+      "note_hint": "AI 原生 UX 设计",
+      "topic": "AI 产品设计",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 产品评审方法？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_product-reviews.md",
+      "note_hint": "产品评审方法",
+      "topic": "工程协作 & 流程",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 产品实验设计？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_product-experiments.md",
+      "note_hint": "产品实验设计",
+      "topic": "数据驱动决策",
+      "source": "auto-seed"
+    },
+    {
+      "query": "AI 产品领域，AI 搜索可见性优化（AEO/GEO） 的核心方法是什么？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_ai_seo_geo.md",
+      "note_hint": "AI 搜索可见性优化（AEO/GEO）",
+      "topic": "内容 & SEO/GEO",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 PLG 基础？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_plg-fundamentals.md",
+      "note_hint": "PLG 基础",
+      "topic": "商业化 & 定价",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 [Obsidian AI教程] Copilot插件完全指南：AI 对话、RAG、参数设置一次讲透？它的关键要点有哪些？",
+      "note_path": "网页提取/Obsidian相关知识/Obsidian AI教程 Copilot插件完全指南：AI 对话、RAG、参数设置一次讲透.md",
+      "note_hint": "[Obsidian AI教程] Copilot插件完全指南：AI 对话、RAG、参数设置一次讲透",
+      "topic": "AI 开发工具",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 Karpathy的Obsidian工作流，结合WIKI打造本地知识库_哔哩哔哩_bilibili？它的关键要点有哪些？",
+      "note_path": "网页提取/Obsidian相关知识/Karpathy的Obsidian工作流，结合WIKI打造本地知识库_哔哩哔哩_bilibili.md",
+      "note_hint": "Karpathy的Obsidian工作流，结合WIKI打造本地知识库_哔哩哔哩_bilibili",
+      "topic": "RAG & 检索系统",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 Prompt Engineering 系统化方法论？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_prompt_engineering.md",
+      "note_hint": "Prompt Engineering 系统化方法论",
+      "topic": "LLM & Prompt 工程",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 组织设计？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_org-design.md",
+      "note_hint": "组织设计",
+      "topic": "组织 & 沟通",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 收藏！2026年AI产品经理必备：10大核心能力从小白到进阶全攻略？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-29_2026-ai-10.md",
+      "note_hint": "收藏！2026年AI产品经理必备：10大核心能力从小白到进阶全攻略",
+      "topic": "LLM & Prompt 工程",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 定价策略？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_pricing-strategy.md",
+      "note_hint": "定价策略",
+      "topic": "商业化 & 定价",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 大厂AI产品经理到底要会啥？？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-29_ai.md",
+      "note_hint": "大厂AI产品经理到底要会啥？",
+      "topic": "AI 评测 & 质量",
+      "source": "auto-seed"
+    },
+    {
+      "query": "AI 产品领域，AI 产品策略 的核心方法是什么？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_ai-product-strategy.md",
+      "note_hint": "AI 产品策略",
+      "topic": "产品策略 & 路线图",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 北极星指标？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_north-star-metrics.md",
+      "note_hint": "北极星指标",
+      "topic": "数据驱动决策",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 用 AI Agent 构建产品？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_building-with-ai-agents.md",
+      "note_hint": "用 AI Agent 构建产品",
+      "topic": "AI Agent & 架构",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 创意精炼：从模糊到可执行？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_idea_refine.md",
+      "note_hint": "创意精炼：从模糊到可执行",
+      "topic": "AI 产品设计",
+      "source": "auto-seed"
+    },
+    {
+      "query": "AI 产品领域，AI 辅助原型设计 的核心方法是什么？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_ai-assisted-prototyping.md",
+      "note_hint": "AI 辅助原型设计",
+      "topic": "AI 开发工具",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 7 Powers / 7 Powers（七大力量）？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_PM_amplitude_7-powers.md",
+      "note_hint": "7 Powers / 7 Powers（七大力量）",
+      "topic": "竞争 & 定位",
+      "source": "auto-seed"
+    },
+    {
+      "query": "什么是 增长模型构建？它的关键要点有哪些？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_LENNY_growth-model.md",
+      "note_hint": "增长模型构建",
+      "topic": "增长 & 发布",
+      "source": "auto-seed"
+    },
+    {
+      "query": "AI 产品领域，AI Agent 系统架构设计方法论 的核心方法是什么？",
+      "note_path": "Knowledge Lab/00_学习笔记/2026-07-26_agent_architect.md",
+      "note_hint": "AI Agent 系统架构设计方法论",
+      "topic": "AI Agent & 架构",
+      "source": "auto-seed"
+    }
+  ]
+}

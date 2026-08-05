@@ -27,6 +27,56 @@ VAULT_PATH = os.environ.get('VAULT_PATH', os.path.join(os.path.dirname(os.path.d
 NOTES_DIR = os.path.join(VAULT_PATH, 'Knowledge Lab', '00_学习笔记')
 EXTRA_NOTE_DIRS = [os.path.join(VAULT_PATH, 'Clippings'), os.path.join(VAULT_PATH, '网页提取')]
 
+def _rag_enhance(topic, scanned_notes):
+    """Opt-in semantic retrieval (RAG_RETRIEVAL=1): find notes whose chunks are
+    semantically relevant to the topic even when keyword/tag matching misses them.
+    Returns a set of note basenames to merge into the matched set."""
+    if os.environ.get('RAG_RETRIEVAL', '') != '1':
+        return set()
+    try:
+        from rag_index import load_index, retrieve
+        try:
+            load_index()
+        except Exception as e:
+            print(f'[RAG] 索引不存在，跳过语义检索（先运行 python -m server.rag_index build）: {e}', file=sys.stderr)
+            return set()
+        chunks = retrieve(topic, top_k=5, retriever='hybrid')
+        if not chunks:
+            return set()
+        # Match by basename: rag_index paths are VAULT-relative, quiz paths are dir-relative.
+        return {os.path.basename(c['note_path']) for c in chunks}
+    except Exception as e:
+        print(f'[RAG] 语义检索失败: {e}', file=sys.stderr)
+        return set()
+
+
+def _memory_enhance(topic, store=None):
+    """Opt-in learner memory injection (MEMORY_ENABLE=1): read the learner's
+    long-term memory (progress / decisions / open questions) from
+    data/memory_store.json and return a prompt snippet for build_prompt.
+    Returns '' when disabled, no memory, or on any error (出题不受影响)."""
+    if os.environ.get('MEMORY_ENABLE', '') != '1':
+        return ''
+    try:
+        from memory_core import MemoryStore
+        mem = (store or MemoryStore()).get('learner')
+        if not mem:
+            return ''
+        parts = []
+        if mem.get('summary'):
+            parts.append(f"- 学习进展: {mem['summary']}")
+        if mem.get('decisions'):
+            parts.append('- 已确定事项: ' + '; '.join(mem['decisions']))
+        if mem.get('open_questions'):
+            parts.append('- 待强化: ' + '; '.join(mem['open_questions']))
+        if not parts:
+            return ''
+        return '\n'.join(parts)
+    except Exception as e:
+        print(f'[MEMORY] 读取长期记忆失败（不影响出题）: {e}', file=sys.stderr)
+        return ''
+
+
 def find_notes(topic=None):
     notes = []
     for search_dir in [NOTES_DIR] + EXTRA_NOTE_DIRS:
@@ -72,6 +122,18 @@ def find_notes(topic=None):
         if not matched:
             # Last fallback: substring match on title/content
             matched = [n for n in notes if topic.lower() in n['title'].lower() or topic.lower() in n['content'].lower()]
+        # RAG semantic enhancement (opt-in): merge semantically relevant notes
+        # that keyword/tag matching missed. Default off — existing behavior unchanged.
+        rag_basenames = _rag_enhance(topic, notes)
+        if rag_basenames:
+            seen = {n['path'] for n in matched}
+            extra = [n for n in notes
+                     if os.path.basename(n['path']) in rag_basenames
+                     and n['path'] not in seen
+                     and 'status: ready' in n.get('content', '')]
+            if extra:
+                print(f'[RAG] 语义检索补充 {len(extra)} 篇笔记', file=sys.stderr)
+                matched = matched + extra
         notes = matched
     # Quality Gate (L0-003): Only use status: ready notes
     eligible = []
@@ -88,13 +150,14 @@ def find_notes(topic=None):
         print(f'[QualityGate] ERROR: {len(notes)} notes found for topic but 0 are "ready". Use the dashboard to review and approve draft notes.', file=sys.stderr)
     return eligible
 
-def build_prompt(topic, count, types, difficulty, notes):
+def build_prompt(topic, count, types, difficulty, notes, memory_context=''):
     context = ''
     for i, note in enumerate(notes[:10]):
         content = note['content'][:3000]
         context += f'\n### Source {i+1}: {note["title"]}\n{content}\n'
     type_desc = {'single_choice': '单选题(4选项A/B/C/D)', 'short_answer': '简答题(2-4句)', 'scenario': '场景题(AI PM实际场景)'}
     type_str = '\n'.join([f'- {type_desc.get(t, t)}' for t in types])
+    memory_block = f'\n## 用户长期记忆（出题参考：侧重薄弱点）\n{memory_context}\n' if memory_context else ''
     return f"""你是AI产品经理教学专家。请基于以下学习笔记内容，生成{count}道测验题。
 
 ## 内容质量标准
@@ -108,7 +171,7 @@ def build_prompt(topic, count, types, difficulty, notes):
 ## 要求
 主题：{topic} · 数量：{count} · 难度：{difficulty}
 题型：{type_str}
-
+{memory_block}
 ## 规则
 1. 单选题4个选项，干扰项需合理但明确错误
 2. 简答题提供2-4句模型答案
@@ -172,7 +235,8 @@ def main():
     types = [t.strip() for t in args.types.split(',')]
     notes = find_notes(args.topic)
     if not notes: print(json.dumps({'error': f'No notes found for topic "{args.topic}"', 'status': 'no_content'}, ensure_ascii=False)); sys.exit(1)
-    prompt = build_prompt(args.topic, args.count, types, args.difficulty, notes)
+    memory_context = _memory_enhance(args.topic)
+    prompt = build_prompt(args.topic, args.count, types, args.difficulty, notes, memory_context)
     response = call_llm(prompt)
     result = parse_response(response)
     if 'error' in result: print(json.dumps(result, ensure_ascii=False)); sys.exit(1)
@@ -190,7 +254,7 @@ def main():
                 session_topics.add(t.strip())
     if not session_topics and args.topic:
         session_topics.add(args.topic)
-    output = {'status': 'success', 'session_name': f'{args.topic or \"随机\"}测验 {datetime.now().strftime("%Y-%m-%d %H:%M")}', 'topics': list(session_topics)[:5], 'difficulty': args.difficulty, 'source_notes': [{'title': n['title'], 'path': n['path'], 'hash': n['file_hash']} for n in notes], 'questions': checked, 'total': len(checked), 'passed_qa': sum(1 for q in checked if q['quality_passed']), 'generated_at': datetime.now().isoformat()}
+    output = {'status': 'success', 'session_name': f'{args.topic or "随机"}测验 {datetime.now().strftime("%Y-%m-%d %H:%M")}', 'topics': list(session_topics)[:5], 'difficulty': args.difficulty, 'source_notes': [{'title': n['title'], 'path': n['path'], 'hash': n['file_hash']} for n in notes], 'questions': checked, 'total': len(checked), 'passed_qa': sum(1 for q in checked if q['quality_passed']), 'generated_at': datetime.now().isoformat()}
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
 if __name__ == '__main__':

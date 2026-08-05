@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-08-04T18:25:01.128888",
+  "golden_set": "C:\\Users\\27224\\Desktop\\Project\\knowledge-lab\\data\\rag_golden_set.json",
+  "top_k": 5,
+  "metrics": {
+    "keyword": {
+      "queries": 22,
+      "recall@k": {
+        "1": 0.2727,
+        "2": 0.3636,
+        "3": 0.3636,
+        "4": 0.3636,
+        "5": 0.3636
+      },
+      "mrr": 0.3182,
+      "query_embed_tokens_est": 0
+    },
+    "vector": {
+      "queries": 22,
+      "recall@k": {
+        "1": 0.9091,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "5": 1.0
+      },
+      "mrr": 0.9545,
+      "query_embed_tokens_est": 332
+    },
+    "hybrid": {
+      "queries": 22,
+      "recall@k": {
+        "1": 0.9091,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "5": 1.0
+      },
+      "mrr": 0.9545,
+      "query_embed_tokens_est": 332
+    }
+  },
+  "index_stats": {
+    "note_count": 216,
+    "chunk_count": 2582,
+    "processed_notes": 216,
+    "embed_tokens_total": 363176,
+    "built_at": "2026-08-04T18:12:00.376232"
+  },
+  "note": "黄金集判定=命中理想来源笔记(note_path)。embedding query tokens 为估算(len(query)//2)，精确值需从 API usage 埋点。"
+}

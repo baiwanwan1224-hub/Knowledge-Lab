@@ -29,6 +29,9 @@ logs/
 data/*.db
 data/sessions/
 current_session.json
+# 可重建的运行时大文件（embeddings 索引 97MB / 演示视频 26MB，不入库）
+data/rag_index.json
+knowledge_lab_final.mp4
 
 # ═══════════════════════════════════════════
 # Vault — 数据防丢策略
