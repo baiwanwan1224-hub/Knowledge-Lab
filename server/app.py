@@ -44,7 +44,13 @@ def create_app():
         app.register_blueprint(bp, url_prefix='/v1')
 
     # ── Root: serve dashboard ──
-    DASHBOARD_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'apps', 'web', 'dashboard_v2.html')
+    # v0.3.0 (8/5): WEB_VERSION 环境变量切换前端版本目录。
+    #   v2 = apps/web/dashboard_v2.html（默认 · 保留原版）
+    #   v3 = apps/web_v3/dashboard_v2.html（语言切换等新功能）
+    _web_version = os.environ.get('WEB_VERSION', 'v2')
+    _web_dir = 'web_v3' if _web_version == 'v3' else 'web'
+    DASHBOARD_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                  'apps', _web_dir, 'dashboard_v2.html')
 
     @app.route('/')
     def index():
