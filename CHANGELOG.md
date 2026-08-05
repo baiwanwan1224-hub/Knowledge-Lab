@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.2.1 (2026-08-05)
+
+### New Features · 新功能
+- **RAG 检索核心** (`server/rag_index.py`) — Markdown `##` 结构分块（216 篇→2582 chunks）+ 智谱 embedding-3 语义索引 + vector/keyword/hybrid 三路检索 + XML context 注入；评测 `scripts/rag_eval.py`（22 条黄金集：vector/hybrid Recall@1 **0.909** / MRR 0.955）
+- **中文 keyword 检索增强** — 相邻汉字 bigram 命中加权（无依赖近似分词），keyword Recall@1 **0.273→0.409**
+- **长/短记忆压缩** (`server/memory_core.py`) — 滚动摘要 + 关键信息提取 + 忠实度门禁（GLM-4-flash 逐断言校验，≥95% 才入库）+ 短记忆窗口 + XML memory 注入
+- **quiz 记忆闭环**（`MEMORY_ENABLE=1`）— 批改后聚合答题表现（知识点/对错/薄弱点）写入学习者记忆（写侧），出题时注入薄弱点侧重（读侧）
+- 整合演示 `scripts/rag_memory_demo.py` — 检索→记忆压缩→注入 prompt 全链路
+
+### Bug Fixes · 缺陷修复
+- **忠实度门禁原文截断修复** — 原 `source_text[-8000:]` 只取尾部，长对话时开头关键事实被切掉导致真实信息被误拒；改头尾保留、省略中段
+- **quiz_generator f-string 语法错误** — f-string 表达式内反斜杠转义与未转义引号混合，在 Python 3.14 下无法编译
+
+### Tests · 测试
+- 57→68 pytest passed（截断/记忆集成/bigram 新增）
+
+---
+
 ## v0.1.1 (2026-07-29)
 
 ### Bug Fixes · 缺陷修复
