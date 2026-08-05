@@ -215,6 +215,22 @@ tr:hover{background:var(--bg)}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .competency-grid{grid-template-columns:1fr}
   .form-row{flex-direction:column}
+  /* ── 8/5 补全：表格→卡片 · 按钮/输入全宽 · 弹窗适配 ── */
+  .note-table{display:block}
+  .note-table thead{display:none}
+  .note-table tbody{display:block}
+  .note-table tr{display:block;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface)}
+  .note-table td{display:block;padding:4px 0;border:none;width:100%}
+  .col-title{max-width:unset !important;white-space:normal !important;font-size:15px;font-weight:600}
+  .col-summary{max-width:unset !important;white-space:normal !important}
+  .col-source,.col-time,.col-status,.col-author{display:inline-block;margin-right:10px;max-width:unset !important}
+  .btn{width:100%;padding:12px}
+  .btn-sm{width:auto;padding:5px 14px}
+  input,select,textarea{width:100%;font-size:16px}
+  .modal-overlay{padding:10px;align-items:flex-start}
+  .modal{max-width:95vw;padding:16px;max-height:88vh}
+  #quizArea .flex-between{flex-wrap:wrap}
+  #quizArea button{flex:1;min-width:80px}
 }
 </style>
 </head>

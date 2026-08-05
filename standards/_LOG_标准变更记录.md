@@ -39,7 +39,7 @@ scope: 所有 _STANDARD_ 文件的变更历史
 
 | 项目 | 状态 | 说明 |
 |------|:--:|------|
-| Golden Test Set (5题) | ⬜ | 人工标注标准答案 + 评分，用于每月回归 |
+| Golden Test Set (5题) | ✅ 8/5 | `data/golden_set.json` 5 题 + `scripts/golden_regression.py` · 首跑 5/5 通过（G003-005 dev=1.0 临界：LLM 偏严约 1 分）· 每周回归 |
 | 双模型评分校准 | ⬜ | GPT-4.1 vs DeepSeek 评分偏差追踪 |
 | 能力维度权重调优 | ⬜ | 等待 ≥ 50 次测验数据后首次调参 |
 | SM-2 参数验证 | ⬜ | 等待 ≥ 30 天复习数据后验证间隔合理性 |

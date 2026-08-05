@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-08-05T15:32:14.256645",
+  "threshold": 1.0,
+  "pairs": [
+    {
+      "id": "G001",
+      "type": "single_choice",
+      "llm_score": 1.0,
+      "expected_score": 1.0,
+      "max": 1.0,
+      "deviation": 0.0,
+      "passed": true
+    },
+    {
+      "id": "G002",
+      "type": "single_choice",
+      "llm_score": 0,
+      "expected_score": 0.0,
+      "max": 1.0,
+      "deviation": 0.0,
+      "passed": true
+    },
+    {
+      "id": "G003",
+      "type": "short_answer",
+      "llm_score": 3.0,
+      "expected_score": 4.0,
+      "max": 5.0,
+      "deviation": 1.0,
+      "passed": true
+    },
+    {
+      "id": "G004",
+      "type": "short_answer",
+      "llm_score": 2.0,
+      "expected_score": 1.0,
+      "max": 5.0,
+      "deviation": 1.0,
+      "passed": true
+    },
+    {
+      "id": "G005",
+      "type": "scenario",
+      "llm_score": 2.0,
+      "expected_score": 3.0,
+      "max": 5.0,
+      "deviation": 1.0,
+      "passed": true
+    }
+  ],
+  "passed": 5,
+  "total": 5,
+  "note": "人工标注标准评分来自 data/golden_set.json，依据 _STANDARD_评分标准.md 各题型等级。"
+}

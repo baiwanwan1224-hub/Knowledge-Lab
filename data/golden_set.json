@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "purpose": "LLM 批改质量回归 · standards/_STANDARD_评分标准.md §五：5 道金题 + 标准答案 + 评分基准，每周回归，偏差 > 1 分调整批改 prompt",
+    "created": "2026-08-05",
+    "deviate_limit": 1.0,
+    "source": "standards/_STANDARD_评分标准.md"
+  },
+  "pairs": [
+    {
+      "id": "G001",
+      "type": "single_choice",
+      "difficulty": "easy",
+      "question": "AI 产品经理最核心的职责是下列哪一项？",
+      "options": [
+        {"label": "A", "text": "负责模型的算法调参与超参数优化"},
+        {"label": "B", "text": "编写后端服务的核心代码逻辑"},
+        {"label": "C", "text": "定义业务问题、规划 AI 能力落地路径并推动跨团队协作"},
+        {"label": "D", "text": "负责 GPU 集群的运维与成本控制"}
+      ],
+      "correct_answer": "C",
+      "explanation": "AI 产品经理的核心是定义问题与价值，规划 AI 落地路径并协调算法/工程/业务三方，而非亲自调参或写代码。",
+      "knowledge_point": "AI 产品经理职责",
+      "student_answer": "C",
+      "expected_score": 1.0,
+      "expected_max": 1.0,
+      "note": "单选答对 → 应给满分，检验不误判"
+    },
+    {
+      "id": "G002",
+      "type": "single_choice",
+      "difficulty": "medium",
+      "question": "在 RAG 检索中，embedding 向量的主要作用是什么？",
+      "options": [
+        {"label": "A", "text": "将文本映射到高维语义空间，使语义相近的文本向量距离更近"},
+        {"label": "B", "text": "对文本进行压缩以节省存储空间"},
+        {"label": "C", "text": "对文本进行加密以保证数据安全"},
+        {"label": "D", "text": "将文本转换成可执行的代码"}
+      ],
+      "correct_answer": "A",
+      "explanation": "embedding 把文本映射到语义向量空间，检索时用向量相似度召回语义相关片段。",
+      "knowledge_point": "RAG 检索",
+      "student_answer": "C",
+      "expected_score": 0.0,
+      "expected_max": 1.0,
+      "note": "单选答错 → 应给 0，检验能识别错误答案"
+    },
+    {
+      "id": "G003",
+      "type": "short_answer",
+      "difficulty": "medium",
+      "question": "你如何为一个人工智能功能定义成功指标？请简述你的方法。",
+      "correct_answer": "定义成功指标应：1) 从业务目标倒推，明确该 AI 功能要解决的业务问题；2) 区分北极星指标与过程指标（如准确率、覆盖率、用户采纳率）；3) 设定基准值与目标值并与现状对比；4) 建立可观测的数据埋点与反馈闭环。",
+      "explanation": "好答案需覆盖：业务目标倒推、北极星 vs 过程指标、基准/目标值、数据埋点与反馈闭环。",
+      "knowledge_point": "AI 产品指标定义",
+      "student_answer": "我会先看这个功能要解决什么业务问题，然后选几个关键指标，比如准确率和用户使用率，设个目标值，上线后再看数据调整。",
+      "expected_score": 4.0,
+      "expected_max": 5.0,
+      "note": "覆盖了业务倒推+指标+目标值+反馈，但未明确区分北极星vs过程指标、无案例 → 良好 4/5"
+    },
+    {
+      "id": "G004",
+      "type": "short_answer",
+      "difficulty": "easy",
+      "question": "什么是提示词工程？它在 AI 应用中的作用是什么？",
+      "correct_answer": "提示词工程是设计、优化与迭代输入给大模型的提示（prompt），以稳定获得符合预期的输出。作用包括：控制输出格式、注入上下文、引导推理步骤、降低幻觉与成本。",
+      "explanation": "需覆盖：prompt 设计与优化、控制输出/注入上下文/降低幻觉等作用。",
+      "knowledge_point": "提示词工程",
+      "student_answer": "提示词工程就是给 AI 发消息时把话说清楚一点，这样 AI 就能回答得更好。",
+      "expected_score": 1.0,
+      "expected_max": 5.0,
+      "note": "只有极其笼统的直觉描述，无设计/优化/作用机制 → 接近错误 1/5"
+    },
+    {
+      "id": "G005",
+      "type": "scenario",
+      "difficulty": "hard",
+      "question": "你的团队准备上线一个面向客服场景的 AI 助手。上线前，你发现模型在少数刁钻问题上会产生错误回答。作为 AI 产品经理，你会如何处理？",
+      "correct_answer": "处理路径：1) 先评估风险等级，区分『会造成实质危害』与『只是回答不理想』；2) 对高风险场景设置安全兜底（无法置信时转人工/拒答）；3) 建立错误样本回流机制，持续用真实案例优化 prompt 与检索；4) 制定灰度发布与监控指标（准确率、转人工率、投诉率）；5) 与业务、合规对齐责任边界。",
+      "explanation": "满分需覆盖：风险分级、安全兜底、样本回流、灰度与监控、利益相关者对齐。",
+      "knowledge_point": "AI 落地风险管理",
+      "student_answer": "我会先上线，因为大部分问题 AI 都能答好，只在小部分刁钻问题上出错，用户应该能接受。出错的问题收集起来，以后慢慢优化。",
+      "expected_score": 3.0,
+      "expected_max": 5.0,
+      "note": "识别了问题并有优化意识，但缺乏风险分级、安全兜底、灰度监控 → 部分理解 3/5"
+    }
+  ]
+}

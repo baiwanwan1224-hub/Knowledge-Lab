@@ -18,6 +18,24 @@
 
 ---
 
+## v0.2.0 (2026-08-01)
+
+### New Features · 新功能
+- **七层数据清洗管线** — 5 个新模块（commit `d5f3b66`）：
+  - `server/html_cleaner.py`：HTML→纯净文本（去 script/style/注释/tag/实体/样板）
+  - `server/transcription_cleaner.py`：YouTube/WAV 转录稿清洗（去时间戳/说话人标签/字幕伪影/去重/合并碎行）
+  - `server/frontmatter_utils.py`：YAML frontmatter 统一解析（替换 notes.py / dashboard 的散乱逐行解析）
+  - `server/quality_gate.py`：L0-003 质量门禁（仅 `status: ready` 可出题 · 状态校验/批量提升/统计）
+  - `server/dedup.py`：内容去重（SHA-256 精确 + 5-gram Jaccard 近似 · `--scan`/`--merge` 迁移工具）
+- **修复 7 项 RAG 管线审计缺口**（基于 7/31 审计报告）
+- 笔记上传流程（`server/blueprints/notes.py`）集成清洗管线
+- 数据清洗管线 skill：`skills/08_data_cleaning_pipeline.md` + `RED_SKILL_KnowledgeLab.md`
+
+### Tests · 测试
+- 32/32 pytest passed
+
+---
+
 ## v0.1.1 (2026-07-29)
 
 ### Bug Fixes · 缺陷修复
