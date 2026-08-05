@@ -40,7 +40,7 @@ scope: 所有 _STANDARD_ 文件的变更历史
 | 项目 | 状态 | 说明 |
 |------|:--:|------|
 | Golden Test Set (5题) | ✅ 8/5 | `data/golden_set.json` 5 题 + `scripts/golden_regression.py` · 首跑 5/5 通过（G003-005 dev=1.0 临界：LLM 偏严约 1 分）· 每周回归 |
-| 双模型评分校准 | ⬜ | GPT-4.1 vs DeepSeek 评分偏差追踪 |
+| 双模型评分校准 | 🟡 8/5 首跑 | `scripts/model_calibration.py` · DeepSeek vs GLM-4-flash 4/5 通过 · **G005 场景 dev=2.5 超偏差（DS 1.0 偏严 vs GLM 3.5 偏宽 · 人工标注 3.0）** · 标准§五指定 GPT-4.1，配 MODEL_B_API_KEY/URL/MODEL 切换 |
 | 能力维度权重调优 | ⬜ | 等待 ≥ 50 次测验数据后首次调参 |
 | SM-2 参数验证 | ⬜ | 等待 ≥ 30 天复习数据后验证间隔合理性 |
 

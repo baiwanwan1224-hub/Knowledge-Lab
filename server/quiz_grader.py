@@ -26,7 +26,9 @@ LLM_MODEL = os.environ.get('LLM_MODEL', 'deepseek-v4-pro')
 VAULT_PATH = os.environ.get('VAULT_PATH', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'vault'))
 WRONG_ANSWER_DIR = os.path.join(VAULT_PATH, 'Knowledge Lab', '01_错题本')
 
-def grade_answer(question, user_answer):
+def grade_answer(question, user_answer, api_key=None, api_url=None, model=None):
+    """用指定（或默认 DeepSeek）模型批改一题。api_key/api_url/model 可覆盖，
+    供双模型校准（model_calibration.py）对同一答案用不同模型交叉评分。"""
     q_type = question.get('type', 'short_answer'); correct = question.get('correct_answer', '')
     question_text = question.get('question', ''); explanation = question.get('explanation', '')
     prompt = f"""你是AI产品经理教学专家。严格按评分标准打分。
@@ -44,11 +46,14 @@ def grade_answer(question, user_answer):
 - 质量阈值：单题得分<60%标准分→标记为错题
 - 输出格式（严格JSON）：{{"score":3.5,"max_score":5.0,"is_correct":false,"feedback":"反馈...","strengths":[],"gaps":[],"weakness_tags":[],"misunderstanding":"","suggested_review":"","confidence":0.85}}
 - weakness_tags可选：概念理解不清、缺少具体案例、框架不完整、分析深度不足、表述不够精准、完全错误"""
-    if not LLM_API_KEY:
+    _key = api_key or LLM_API_KEY
+    _url = api_url or LLM_API_URL
+    _model = model or LLM_MODEL
+    if not _key:
         return {'error': 'LLM_API_KEY not configured — set it in .env'}
     try:
-        resp = requests.post(LLM_API_URL, headers={'Authorization': f'Bearer {LLM_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': LLM_MODEL, 'messages': [{'role': 'system', 'content': '严格但公平的评分专家。严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 1500}, timeout=60)
+        resp = requests.post(_url, headers={'Authorization': f'Bearer {_key}', 'Content-Type': 'application/json'},
+            json={'model': _model, 'messages': [{'role': 'system', 'content': '严格但公平的评分专家。严格按JSON格式输出。'}, {'role': 'user', 'content': prompt}], 'temperature': 0.3, 'max_tokens': 1500}, timeout=60)
         if resp.status_code != 200: return {'error': f'API error {resp.status_code}'}
     except Exception as e:
         return {'error': f'LLM request failed: {str(e)[:200]}'}

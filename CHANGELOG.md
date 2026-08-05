@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.3.0 (2026-08-05)
+
+### New Features · 新功能
+- **前端版本化结构** — 新目录 `apps/web_v3/`，`WEB_VERSION` 环境变量切换前端版本（默认 v2 保留原版，v3 承载新功能）；`server/app.py` 按版本服务 dashboard
+- **内容语言切换（中/英）** — 侧边栏语言按钮 + localStorage 记忆；导航 / 页面标题 / 副标题 i18n 化（`data-i18n` + `t()`）
+- **双模型批改校准** (`scripts/model_calibration.py`) — DeepSeek vs 第二模型（默认智谱 GLM-4-flash，可配 `MODEL_B_*` 切 GPT-4.1）交叉评分 golden set，偏差 >1 分触发审查；首跑 4/5（G005 场景题 dev=2.5 触发审查：DS 1.0 偏严 vs GLM 3.5 偏宽）
+- **Golden Test Set** (`data/golden_set.json` + `scripts/golden_regression.py`) — 5 道金题全题型档位 + 每周回归；首跑 5/5（G003-005 dev=1.0 临界 = LLM 批改偏严约 1 分）
+- **移动端响应式补全** — 表格→卡片、按钮/输入全宽（16px 防 iOS 缩放）、弹窗 95vw、测验区 wrap；375px 视口验证生效
+- **长 PDF 分篇修复** — `_split_long_text()` 段落优先 + 换行边界硬切兜底；真实 151K 字符 PDF → 4 篇
+
+### Bug Fixes · 缺陷修复
+- **长 PDF 只生成一篇**（根因：原只按 `\n\n` 空行分段，而 PDF 提取文本只有 `\n` 无空行 → 永不拆分）
+- `quiz_grader.grade_answer` 支持指定 api_key/api_url/model（双模型校准用，默认行为不变）
+
+### Tests · 测试
+- 74 pytest passed（含 5 个长 PDF 拆分测试）
+
+---
+
 ## v0.2.1 (2026-08-05)
 
 ### New Features · 新功能

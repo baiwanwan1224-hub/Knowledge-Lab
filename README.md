@@ -189,7 +189,7 @@ Commercial use requires a separate license. Contact: baiwanwan1224@gmail.com
 
 ---
 
-[![Release](https://img.shields.io/badge/release-v0.1.1-blue)](https://github.com/baiwanwan1224-hub/Knowledge-Lab/releases)
+[![Release](https://img.shields.io/badge/release-v0.3.0-blue)](https://github.com/baiwanwan1224-hub/Knowledge-Lab/releases)
 [![YouTube](https://img.shields.io/badge/demo-YouTube-red)](https://youtu.be/55a1-DYoH3E)
 [![Bilibili](https://img.shields.io/badge/demo-Bilibili-00A1D6)](https://www.bilibili.com/video/BV1Gj3n6VEvQ/)
 
