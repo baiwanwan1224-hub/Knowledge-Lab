@@ -293,6 +293,59 @@ def _handle_paste(content, topic=""):
     return jsonify({'status': status, 'file': fname, 'title': title, 'topics': topics_list})
 
 
+def _chunk_by_newline(text, split_at):
+    """按字符预算切分一段文本，优先在换行边界落刀（避免从行中间切开）。
+
+    换行符保留在块尾（不丢任何字符），`''.join(chunks) == text`。
+    """
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(start + split_at, len(text))
+        if end == len(text):
+            chunks.append(text[start:])
+            break
+        cut = text.rfind('\n', start, end)
+        if cut <= start:
+            cut = end  # 窗口内无换行：硬切
+            chunks.append(text[start:cut])
+            start = cut
+        else:
+            chunks.append(text[start:cut + 1])  # 在换行处切，换行符留在块尾
+            start = cut + 1
+    return chunks
+
+
+def _split_long_text(raw_text, split_at=50000):
+    """长文本按字符预算拆成多篇。
+
+    原实现只按 '\\n\\n' 空行分段——但 PDF 提取的文本通常没有空行、只有
+    '\\n' 换行，导致 split('\\n\\n') 只产生 1 段，长 PDF 永不拆分
+    （8/5 诊断复现：150K 字符 PDF 提取完整、触发条件满足、仍只拆 1 篇）。
+    新逻辑：段落优先（'\\n\\n' 语义分块），单段超预算再按 '\\n' 边界硬切兜底。
+    """
+    if len(raw_text) <= split_at:
+        return [raw_text]
+    paras = raw_text.split('\n\n')
+    parts = []
+    current = ''
+    for p in paras:
+        if len(p) > split_at:  # 单段超预算：先落盘 current，再细切该段
+            if current:
+                parts.append(current)
+                current = ''
+            parts.extend(_chunk_by_newline(p, split_at))
+            continue
+        if len(current) + len(p) > split_at and current:
+            parts.append(current)
+            current = p
+        else:
+            current = (current + '\n\n' + p).strip()
+    if current:
+        parts.append(current)
+    return parts
+
+
 @notes_bp.route('/notes/upload', methods=['POST'])
 def upload_file():
     # Batch image OCR mode
@@ -400,21 +453,10 @@ def upload_file():
         try: os.unlink(tmp.name)
         except OSError: pass
 
-    # Split long PDFs into multiple notes (30000 chars each)
+    # Split long PDFs into multiple notes (SPLIT_AT chars each)
+    # 8/5 fix: 原只按 '\n\n' 分段，PDF 提取文本无空行导致永不拆分 → 段落优先+换行兜底
     SPLIT_AT = 50000
-    if len(raw_text) > SPLIT_AT:
-        paras = raw_text.split('\n\n')
-        parts = []; current = ''
-        for p in paras:
-            if len(current) + len(p) > SPLIT_AT and current:
-                parts.append(current)
-                current = p
-            else:
-                current = (current + '\n\n' + p).strip()
-        if current:
-            parts.append(current)
-    else:
-        parts = [raw_text]
+    parts = _split_long_text(raw_text, split_at=SPLIT_AT)
 
     topic = request.form.get('topic', '')
     results = []
